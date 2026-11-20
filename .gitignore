@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# generated outputs
+compare.html
+diff.csv
+diff.html

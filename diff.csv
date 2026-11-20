@@ -1,5 +1,0 @@
-sheet,left_row,right_row,row_status,column,left_value,right_value,severity
-Data,2,2,different,Sales,100,100.0004,important
-Data,2,2,different,Region,West,WEST,important
-Data,3,3,different,Sales,200,250,important
-Data,,4,right_only,,,2025-01-05 | NewProd | 999 | South | ,important
