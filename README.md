@@ -5,7 +5,8 @@ comparison — two ways to run it:
 
 ## Option A — `compare.html` (browser UI, no setup)
 
-Double-click `compare.html` (or drag it into a browser tab).
+Double-click `compare.html` (or drag it into a browser tab) — or open the
+hosted copy: <https://rjarupula1729.github.io/table-compare/>.
 100% client-side, zero dependencies — **your files never leave your machine**
 (safe for OneDrive / company data). Supports `.xlsx`, `.xlsm`, `.csv`, `.tsv`.
 
@@ -71,6 +72,9 @@ comparison re-runs by itself.
 - Pivot-style reconciliation: pick **Sheets** (multiple — their rows are
   combined), **Group by** columns (multiple — composite groups), and
   **Sum** columns (auto-detected numerics).
+- **Group-by order is yours**: click the *Group by* chips in the order you
+  want to group — numbered badges show the hierarchy (`1` = outermost
+  group). Untick and re-tick a chip to move it to the end.
 - Every group shows `Σ field L | Σ field R | Δ` plus row counts and a
   TOTAL row. **Δ: red = mismatch** (the group key cell flags red too),
   **green = reconciled**. Tiny float noise on huge sums is ignored
@@ -144,5 +148,5 @@ python3 -m venv .venv          # already done
   --key Date,Product --report ksa_diff.html
 ```
 
-(`test_left.xlsx` / `test_right.xlsx` / `test_left.csv` / `test_right.csv`
-are small synthetic fixtures you can use to sanity-check the tool, or delete.)
+(Small synthetic fixtures — `test_left.xlsx`, `test_right.xlsx`, etc. —
+are handy for a quick sanity check; they are kept locally, not in the repo.)
