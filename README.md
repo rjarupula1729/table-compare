@@ -79,6 +79,10 @@ comparison re-runs by itself.
   TOTAL row. **Δ: red = mismatch** (the group key cell flags red too),
   **green = reconciled**. Tiny float noise on huge sums is ignored
   (~1e-9 of the magnitude), plus your numeric tolerance applies.
+- **Download Excel** exports the summary as `.xlsx` with the same
+  red/green coloring, one column per group-by field (great for sharing or
+  auditing). **Download HTML** exports the colored table as a webpage.
+  Both run fully in the browser — no libraries, works offline.
 
 ### Colors
 

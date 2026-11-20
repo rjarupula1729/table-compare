@@ -298,6 +298,8 @@
     <span>Group by <small class="muted">(click in order — 1 = outermost)</small>
       <span id="gbKeys" class="pickbox"></span></span>
     <span>Sum <span id="gbNums" class="pickbox"></span></span>
+    <button id="btnGbXlsx" disabled>Download Excel</button>
+    <button id="btnGbHtml" disabled>Download HTML</button>
   </div>
   <div class="pscroll" style="max-height:50vh"><div id="gbOut"></div></div>
 </div>
@@ -1442,7 +1444,7 @@ function render(results, unL, unR, doScroll) {
 // reuses the already-loaded files — a pivot-style view that sums numeric
 // columns per group on both files side by side, for quick reconciliation.
 
-const gbState = { lt: null, rt: null, cols: [], numCols: [], keyOrder: [] };
+const gbState = { lt: null, rt: null, cols: [], numCols: [], keyOrder: [], lastXlsx: null };
 
 function gbSheetNames() {
   const names = [];
@@ -1537,6 +1539,7 @@ function gbPopulate() {
   const rts = (state.R || []).filter(t => sel.has(t.name));
   if (!lts.length && !rts.length) {
     gbState.lt = gbState.rt = null; gbState.cols = []; gbState.numCols = [];
+    gbState.lastXlsx = null; $("btnGbXlsx").disabled = true; $("btnGbHtml").disabled = true;
     $("gbKeys").innerHTML = ""; $("gbNums").innerHTML = "";
     $("gbOut").innerHTML = `<p class="muted">select at least one sheet</p>`;
     return;
@@ -1590,7 +1593,10 @@ function gbRender() {
   // one or more group-by columns, in the user's click order — a side can
   // only aggregate if it has all of them
   const keySel = gbState.keyOrder.filter(i => cols[i]);
-  if (!keySel.length) { $("gbOut").innerHTML = `<p class="muted">pick one or more group-by columns</p>`; return; }
+  if (!keySel.length) {
+    gbState.lastXlsx = null; $("btnGbXlsx").disabled = true; $("btnGbHtml").disabled = true;
+    $("gbOut").innerHTML = `<p class="muted">pick one or more group-by columns</p>`; return;
+  }
   const kcs = keySel.map(i => cols[i]);
   const lKeys = kcs.map(c => c.l), rKeys = kcs.map(c => c.r);
   const aggL = lt && lKeys.every(i => i !== null) ? groupAgg(lt, lKeys, sums.map(c => c.l)) : null;
@@ -1611,6 +1617,11 @@ function gbRender() {
   };
   let head = `<tr><th>${kcs.map(c => esc(c.name)).join(" | ")}</th><th class="num">rows L</th><th class="num">rows R</th>` +
     sums.map(c => `<th class="num">Σ ${esc(c.name)} L</th><th class="num">Σ ${esc(c.name)} R</th><th class="num">Δ</th>`).join("") + `</tr>`;
+  const xrows = [[...kcs.map(c => ({ v: c.name, s: 1 })),
+    { v: "rows L", s: 1 }, { v: "rows R", s: 1 },
+    ...sums.flatMap(c => [{ v: `Sum_${c.name} L`, s: 1 },
+                          { v: `Sum_${c.name} R`, s: 1 },
+                          { v: `Delta_${c.name}`, s: 1 }])]];
   const totL = { n: 0, sums: sums.map(() => 0) }, totR = { n: 0, sums: sums.map(() => 0) };
   const body = sorted.map(k => {
     const eL = aggL && aggL.get(k), eR = aggR && aggR.get(k);
@@ -1619,8 +1630,11 @@ function gbRender() {
       const r = eR && c.r !== null ? eR.sums[x] : null;
       return { c, x, l, r, ...normD(l, r) };
     });
+    const xr = [];
     // any real delta anywhere in the row flags the group key cell too
     const hasDelta = ds.some(x => x.flag);
+    k.split("\x01").forEach(v => xr.push({ v, s: hasDelta ? 2 : 0 }));
+    xr.push({ v: eL ? eL.n : "", s: 0 }, { v: eR ? eR.n : "", s: 0 });
     let tds = `<td${hasDelta ? ' class="kdz"' : ""}>${esc(k.replace(/\x01/g, " | "))}</td>` +
       (eL ? `<td class="num">${eL.n}</td>` : dash) +
       (eR ? `<td class="num">${eR.n}</td>` : dash);
@@ -1628,9 +1642,12 @@ function gbRender() {
       tds += (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) +
              (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
              (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
+      xr.push({ v: l ?? "", s: 0 }, { v: r ?? "", s: 0 },
+              { v: d ?? "", s: d === null ? 0 : (flag ? 2 : 3) });
       if (eL && c.l !== null) totL.sums[x] += l;
       if (eR && c.r !== null) totR.sums[x] += r;
     });
+    xrows.push(xr);
     if (eL) totL.n += eL.n;
     if (eR) totR.n += eR.n;
     return `<tr>${tds}</tr>`;
@@ -1647,12 +1664,153 @@ function gbRender() {
              (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
              (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
     }).join("") + `</tr>`;
+  xrows.push([{ v: `TOTAL (${sorted.length} groups)`, s: 4 },
+    ...Array(keySel.length - 1).fill({ v: "", s: 4 }),
+    { v: totL.n, s: 4 }, { v: totR.n, s: 4 },
+    ...sums.flatMap((c, x) => {
+      const l = c.l !== null ? totL.sums[x] : null;
+      const r = c.r !== null ? totR.sums[x] : null;
+      const { d, flag } = normD(l, r);
+      return [{ v: l ?? "", s: 4 }, { v: r ?? "", s: 4 },
+              { v: d ?? "", s: d === null ? 4 : (flag ? 2 : 3) }];
+    })]);
+  gbState.lastXlsx = xrows;
+  $("btnGbXlsx").disabled = false;
+  $("btnGbHtml").disabled = false;
   const missing = (!aggL && lKeys.some(i => i === null) ? "LEFT file lacks a selected group-by column. " : "") +
                   (!aggR && rKeys.some(i => i === null) ? "RIGHT file lacks a selected group-by column." : "");
   $("gbOut").innerHTML = `<table class="prev gb">${head}${tot}${shownBody.join("")}</table>` +
     (missing ? `<p class="muted">${missing}</p>` : "") +
     (body.length > MAXG ? `<p class="muted">showing first ${MAXG} of ${sorted.length} groups</p>` : "");
 }
+
+/* minimal .xlsx writer — uncompressed zip + inline strings, no libraries,
+   so the page stays fully self-contained. */
+const CRC_T = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+const crc32 = u8 => {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+};
+
+// zip container using "stored" entries (no compression) — plenty fast at report sizes
+function makeZip(entries) {
+  const enc = new TextEncoder(), out = [], cds = [];
+  let off = 0;
+  for (const e of entries) {
+    const nm = enc.encode(e.name), n = e.data.length, crc = crc32(e.data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, n, true); lh.setUint32(22, n, true);
+    lh.setUint16(26, nm.length, true);
+    out.push(lh.buffer, nm, e.data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true);
+    cd.setUint32(16, crc, true); cd.setUint32(20, n, true); cd.setUint32(24, n, true);
+    cd.setUint16(28, nm.length, true); cd.setUint32(42, off, true);
+    cds.push(cd.buffer, nm);
+    off += 30 + nm.length + n;
+  }
+  const cdSize = cds.reduce((a, b) => a + b.byteLength, 0);
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true);
+  eocd.setUint16(8, entries.length, true); eocd.setUint16(10, entries.length, true);
+  eocd.setUint32(12, cdSize, true); eocd.setUint32(16, off, true);
+  return new Blob([...out, ...cds, eocd.buffer]);
+}
+
+// style indexes: 0 plain, 1 header, 2 red (mismatch), 3 green (reconciled), 4 total
+const XLSX_STYLE = `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+  `<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font>` +
+  `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
+  `<font><b/><color rgb="FF7A0000"/><sz val="11"/><name val="Calibri"/></font>` +
+  `<font><b/><color rgb="FF0A6B2F"/><sz val="11"/><name val="Calibri"/></font></fonts>` +
+  `<fills count="6"><fill><patternFill/></fill><fill><patternFill patternType="gray125"/></fill>` +
+  `<fill><patternFill patternType="solid"><fgColor rgb="FFF2F5FA"/><bgColor indexed="64"/></patternFill></fill>` +
+  `<fill><patternFill patternType="solid"><fgColor rgb="FFFFDADA"/><bgColor indexed="64"/></patternFill></fill>` +
+  `<fill><patternFill patternType="solid"><fgColor rgb="FFC9F5D4"/><bgColor indexed="64"/></patternFill></fill>` +
+  `<fill><patternFill patternType="solid"><fgColor rgb="FFEEF3FB"/><bgColor indexed="64"/></patternFill></fill></fills>` +
+  `<borders count="1"><border/></borders>` +
+  `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+  `<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+  `<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>` +
+  `<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>` +
+  `<xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>` +
+  `<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>` +
+  `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+
+const XLSX_PARTS = {
+  "[Content_Types].xml": `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+  "_rels/.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+  "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ` +
+    `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheets><sheet name="GroupBy" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+  "xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+    `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+};
+
+// xrows: [[{v, s}, ...], ...] → worksheet XML (numbers stay numeric, text is inline)
+function xlsxSheetXml(xrows) {
+  const cellXml = (ref, { v, s }) => {
+    const sa = s ? ` s="${s}"` : "";
+    if (v === "" || v === null || v === undefined) return `<c r="${ref}"${sa}/>`;
+    if (typeof v === "number") return `<c r="${ref}"${sa}><v>${v}</v></c>`;
+    return `<c r="${ref}" t="inlineStr"${sa}><is><t>${esc(String(v))}</t></is></c>`;
+  };
+  return `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>` +
+    xrows.map((row, i) => `<row r="${i + 1}">` +
+      row.map((c, j) => cellXml(colLetter(j) + (i + 1), c)).join("") + `</row>`).join("") +
+    `</sheetData></worksheet>`;
+}
+
+$("btnGbXlsx").onclick = () => {
+  const xrows = gbState.lastXlsx;
+  if (!xrows) return;
+  const enc = new TextEncoder(), decl = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
+  const entries = Object.entries({ ...XLSX_PARTS,
+    "xl/styles.xml": XLSX_STYLE,
+    "xl/worksheets/sheet1.xml": xlsxSheetXml(xrows),
+  }).map(([name, xml]) => ({ name, data: enc.encode(decl + xml) }));
+  const blob = makeZip(entries);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "groupby.xlsx"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// colored report: same table as on screen, self-contained html (Excel can open it too)
+$("btnGbHtml").onclick = () => {
+  const t = $("gbOut").querySelector("table");
+  if (!t) return;
+  const css = `table{border-collapse:collapse;font:13px -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+    td,th{border:1px solid #d7dce5;padding:4px 9px;white-space:nowrap}
+    th{background:#f2f5fa;text-align:left}
+    .num{text-align:right;font-variant-numeric:tabular-nums}
+    .dz,.kdz{background:#ffdada;color:#7a0000;font-weight:bold}
+    .ok{background:#c9f5d4;color:#0a6b2f;font-weight:bold}
+    tr.tot td{background:#eef3fb;font-weight:bold}
+    .muted{color:#8a93a3}`;
+  const doc = `<!doctype html><meta charset="utf-8"><title>Group-by summary</title>` +
+    `<style>${css}</style><h3>Group-by summary</h3>${t.outerHTML}`;
+  const blob = new Blob([doc], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "groupby.html"; a.click();
+  URL.revokeObjectURL(a.href);
+};
 </script>
 </body>
 </html>
