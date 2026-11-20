@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Table Compare — local Beyond Compare for Excel/CSV</title>
+<style>
+  :root {
+    --imp:#ffb3b3; --unimp:#b3d9ff; --lo:#ffe0b3; --ro:#b3ffd9;
+    --bd:#dce1e8; --accent:#2f6bd8; --accent-d:#2458b3;
+    --bg:#f2f5f9; --card:#ffffff; --ink:#1f2733; --mut:#5c6b7f;
+    --shadow:0 1px 3px rgba(15,30,50,.08), 0 4px 14px rgba(15,30,50,.05);
+  }
+  * { box-sizing: border-box; }
+  body { font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+         font-size:13px; margin:0; padding:0 18px 40px; color:var(--ink); background:var(--bg); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#c3ccd8; border-radius:6px; border:2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background:#a8b4c4; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  /* app header */
+  .appbar { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+            margin:0 -18px 16px; padding:14px 22px; color:#fff;
+            background:linear-gradient(120deg,#1c3f77 0%,#2f6bd8 60%,#3f83e8 100%);
+            box-shadow:0 2px 8px rgba(20,40,80,.25); }
+  .brand { font-size:19px; font-weight:800; letter-spacing:.3px; }
+  .brand span { font-weight:300; color:#bcd4ff; }
+  .tagline { font-size:12px; color:#cfe0fb; }
+
+  /* file drop zones */
+  .drops { display:flex; gap:16px; margin-bottom:14px; }
+  .drop { flex:1; border:2px dashed #b8c3d2; border-radius:10px; padding:20px 14px;
+          text-align:center; cursor:pointer; background:var(--card);
+          box-shadow:var(--shadow); transition:border-color .15s, background .15s, transform .1s; }
+  .drop:hover { border-color:var(--accent); }
+  .drop.over { border-color:var(--accent); background:#eef4fd; transform:scale(1.005); }
+  .drop.loaded { border-style:solid; border-color:#2fa35c; background:#f2fbf5; }
+  .drop .fname { font-weight:700; display:block; margin-top:6px; word-break:break-all; }
+  .drop .meta { color:var(--mut); font-size:11px; }
+
+  /* options toolbar */
+  .opts { display:flex; flex-wrap:wrap; gap:14px; align-items:end; padding:12px 14px;
+          border:1px solid var(--bd); border-radius:10px; background:var(--card);
+          box-shadow:var(--shadow); margin-bottom:14px; }
+  .opts label { display:flex; flex-direction:column; gap:3px; font-size:11px;
+                color:var(--mut); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  .opts input[type=text], .opts input[type=number], .opts select {
+    font:inherit; font-weight:400; text-transform:none; letter-spacing:0;
+    padding:5px 8px; border:1px solid var(--bd); border-radius:6px; width:170px;
+    background:#fff; color:var(--ink); transition:border-color .15s, box-shadow .15s; }
+  .opts input:focus, .opts select:focus { outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(47,107,216,.15); }
+  .opts input[type=number] { width:80px; }
+  .opts .chk { flex-direction:row; align-items:center; gap:5px; font-size:12px;
+               color:var(--ink); font-weight:400; text-transform:none; letter-spacing:0; }
+  button { font:inherit; padding:6px 18px; border:1px solid var(--bd); border-radius:6px;
+           background:#fff; color:var(--ink); cursor:pointer; font-weight:600;
+           transition:background .15s, border-color .15s, box-shadow .15s; }
+  button:hover { border-color:#9fb0c4; background:#f7f9fc; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.primary:hover { background:var(--accent-d); border-color:var(--accent-d); }
+  button:disabled { opacity:.4; cursor:default; }
+  #btnCsv { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #btnCsv:hover { background:var(--accent-d); }
+  #busy { display:inline-flex; align-items:center; gap:6px; font-style:normal; }
+  #busy::before { content:""; width:11px; height:11px; border:2px solid #d8c06a;
+                  border-top-color:#8a6d00; border-radius:50%;
+                  animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* legend + stats */
+  .legend { margin:10px 0; }
+  .legend span { padding:3px 11px; margin-right:8px; border:1px solid var(--bd);
+                 border-radius:12px; font-size:11px; background:#fff; }
+  .imp { background:var(--imp);} .unimp { background:var(--unimp);}
+  .lo { background:var(--lo);} .ro { background:var(--ro);}
+  .stat { display:inline-block; padding:3px 12px; margin:0 8px 6px 0;
+          border:1px solid var(--bd); border-radius:12px; background:var(--card);
+          box-shadow:var(--shadow); }
+  .stat b { color:var(--accent-d); }
+  .stat.imp b { color:#b00020; } .stat.unimp b { color:#2458b3; }
+  table.grid { border-collapse:collapse; margin:10px 0 30px; }
+  table.grid td, table.grid th { border:1px solid var(--bd); padding:3px 8px; white-space:nowrap;
+    max-width:380px; overflow:hidden; text-overflow:ellipsis; }
+  table.grid th { background:#eef1f6; position:sticky; top:0; }
+  h2.sheet { margin:24px 0 4px; font-size:15px; color:var(--ink); }
+  .note { color:#8a6d00; font-size:12px; }
+  .err { color:#b00020; margin:8px 0; white-space:pre-wrap; }
+  .arrow { color:var(--mut); }
+
+  /* column-mapping cards */
+  #colmapWrap { border:1px solid var(--bd); border-radius:10px; padding:12px 14px;
+                margin-bottom:14px; background:var(--card); box-shadow:var(--shadow);
+                display:none; }
+  #colmapWrap h3, #previewWrap h3, #gbWrap h3 { margin:0 0 10px; font-size:14px; }
+  #colmapWrap h3 small, #previewWrap h3 small, #gbWrap h3 small {
+    font-weight:normal; color:var(--mut); }
+  #colmapStrip { display:flex; gap:10px; overflow-x:auto; padding:4px 2px 10px; }
+  .ccard { flex:0 0 auto; width:215px; border:1px solid var(--bd); border-radius:8px;
+           padding:8px 10px; background:#fff; transition:box-shadow .15s; }
+  .ccard:hover { box-shadow:var(--shadow); }
+  .ccard.unmatched { background:#f4f6f9; border-style:dashed; }
+  .ccard .lab { font-size:9px; color:var(--mut); margin:6px 0 2px; font-weight:700;
+                letter-spacing:.5px; }
+  .ccard .lab:first-child { margin-top:0; }
+  .ccard select { width:100%; font:inherit; padding:4px 6px; border:1px solid var(--bd);
+                  border-radius:5px; background:#fff; }
+  .ccard .sample { display:block; font-size:10px; color:var(--mut); margin-top:2px;
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                   font-style:italic; }
+  .ccard .flags { display:flex; gap:12px; align-items:center; margin-top:8px;
+                  font-size:11px; color:var(--ink); }
+  .ccard .flags label { display:flex; align-items:center; gap:4px; cursor:pointer; }
+  .ccard.dim { opacity:.45; }
+  .ccard .hid { font-size:9px; color:#8a6d00; display:block; margin-top:4px; }
+
+  /* data preview / grids */
+  #previewWrap { display:none; margin-bottom:14px; border:1px solid var(--bd);
+                 border-radius:10px; padding:12px 14px; background:var(--card);
+                 box-shadow:var(--shadow); }
+  .prevSides { display:flex; gap:14px; }
+  .prev { flex:1; min-width:0; border:1px solid var(--bd); border-radius:8px;
+          overflow:hidden; background:#fff; }
+  .ptitle { padding:7px 11px; font-size:11px; font-weight:700; background:#eef1f6;
+            color:var(--mut); text-transform:uppercase; letter-spacing:.4px;
+            border-bottom:1px solid var(--bd); white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+  .pscroll { overflow:auto; max-height:340px; }
+  table.prev { border-collapse:collapse; font-size:11px; }
+  table.prev td, table.prev th { border:1px solid #e4e8ee; padding:3px 7px; white-space:nowrap;
+    max-width:240px; overflow:hidden; text-overflow:ellipsis;
+    font-variant-numeric:tabular-nums; }
+  table.prev th { background:#f4f6fa; position:sticky; top:0; font-weight:700; }
+  table.prev td.rown { background:#f4f6fa; color:#9aa7b8; }
+  table.prev th.keyable { cursor:pointer; }
+  table.prev th.keyable:hover { background:#dfeaf7; }
+  table.prev th.keycol { background:#ffe9a8; }
+  table.prev td.keycell { background:#fff7dd; }
+  table.prev th .keytag { font-size:9px; color:#7a5b00; border:1px solid #c8a415;
+                          border-radius:8px; padding:0 4px; margin-left:4px;
+                          vertical-align:middle; }
+  table.prev th.hdimp { background:#ff9d9d; }
+  table.prev th.hdunimp { background:#a9cffb; }
+  table.prev th .difftag { font-size:9px; border-radius:8px; padding:0 4px;
+                           margin-left:4px; vertical-align:middle;
+                           color:#7a0000; border:1px solid #cc0000; background:#fff; }
+  table.prev th .difftag.un { color:#003d80; border-color:var(--accent); }
+  table.prev th.unmappable { cursor:not-allowed; color:#999; }
+  .fbar { display:flex; gap:8px; align-items:center; margin:14px 0 8px; }
+  .fbar .flab { color:var(--mut); font-size:12px; font-weight:600; }
+  .fbtn { padding:4px 14px; border-radius:14px; }
+  .fbtn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .cmpBoth { display:flex; align-items:flex-start; }
+  .cmpSide { flex:1; min-width:0; }
+  .cmpMid { flex:0 0 auto; }
+  table.prev.mid td.midcell { font-size:10px; color:#555; text-align:center;
+    white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+  table.prev.mid td.midcell.lo, table.prev.mid td.midcell.ro { color:#7a4a00; font-weight:bold; }
+  table.prev.mid td.midcell.diff { background:#ffdada; color:#7a0000; font-weight:bold; }
+  table.prev td.rowdiff { background:#fff0f0; }
+  table.prev td.rown.rdiff { background:#ffdada; color:#7a0000; font-weight:bold; }
+  table.prev tr.selrow td { box-shadow:inset 0 0 0 40px #dfe9ff; }
+  table.prev tr.selrow td.rown { font-weight:bold; color:#1a4fa0; }
+  table.prev tr[data-idx] { cursor:pointer; }
+  table.prev tr[data-idx]:hover td { box-shadow:inset 0 0 0 40px rgba(47,107,216,.07); }
+
+  /* record inspector */
+  .recbar { display:flex; gap:10px; align-items:center; margin:10px 0;
+            font-size:12px; color:var(--ink); }
+  .recbar input[type=number] { font:inherit; width:90px; padding:3px 7px;
+            border:1px solid var(--bd); border-radius:6px; }
+  .recbar input[type=number]:focus { outline:none; border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(47,107,216,.15); }
+  .recV { display:flex; flex-direction:column; gap:3px; margin-bottom:14px; }
+  .recV .pscroll { border:1px solid var(--bd); border-radius:8px; overflow:auto;
+                   max-width:100%; background:#fff; }
+  .loB { background:#fff4e3; } .roB { background:#e5fff2; }
+
+  /* group-by panel */
+  #gbWrap { border:1px solid var(--bd); border-radius:10px; padding:12px 14px;
+            margin-top:16px; background:var(--card); box-shadow:var(--shadow); }
+  .pickbox { display:inline-block; max-height:76px; overflow:auto; vertical-align:top;
+             border:1px solid var(--bd); border-radius:8px; padding:4px; background:#f8fafc;
+             min-width:170px; max-width:46%; }
+  .chip { display:inline-block; padding:2px 11px; margin:2px; border:1px solid var(--bd);
+          border-radius:12px; cursor:pointer; user-select:none; font-size:11px;
+          color:var(--mut); background:#fff; font-weight:600;
+          transition:background .12s, color .12s, border-color .12s; }
+  .chip:hover { border-color:#9fb0c4; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #gbKeys .chip.on { background:#d8a800; border-color:#d8a800; color:#fff; }
+  #gbNums .chip.on { background:#0a8f6b; border-color:#0a8f6b; color:#fff; }
+  table.gb td.num, table.gb th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.gb td.dz { background:#ffdada; color:#7a0000; font-weight:bold; }
+  table.gb td.ok { background:#c9f5d4; color:#0a6b2f; font-weight:bold; }
+  table.gb td.kdz { background:#ffdada; color:#7a0000; font-weight:bold; }
+  table.gb tr.tot td { background:#eef3fb; font-weight:bold; }
+  .muted { color:var(--mut); }
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">⇄ Table<span>Compare</span></div>
+  <div class="tagline">local Beyond Compare for Excel / CSV — everything runs in this page, your files never leave this machine</div>
+</header>
+
+<div class="drops">
+  <div class="drop" id="dropL">LEFT file (.xlsx / .csv)<span class="fname" id="nameL"></span><span class="meta" id="metaL"></span></div>
+  <div class="drop" id="dropR">RIGHT file (.xlsx / .csv)<span class="fname" id="nameR"></span><span class="meta" id="metaR"></span></div>
+</div>
+<input type="file" id="fileL" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden>
+<input type="file" id="fileR" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden>
+
+<div class="opts">
+  <label>Sheet
+    <select id="optSheet"><option value="">All / auto</option></select></label>
+  <label>Numeric tolerance<input type="number" id="optNT" value="0" step="any" min="0"></label>
+  <label>Date tolerance (days)<input type="number" id="optDT" value="0" step="any" min="0"></label>
+  <label class="chk"><input type="checkbox" id="optIC"> ignore case</label>
+  <label class="chk"><input type="checkbox" id="optIW"> ignore whitespace</label>
+  <label class="chk"><input type="checkbox" id="optNoHdr"> no header row</label>
+  <button id="btnCsv" disabled>Export diff CSV</button>
+  <button id="btnReset">Reset</button>
+  <span id="busy" class="note" style="display:none">comparing…</span>
+</div>
+
+<div id="colmapWrap">
+  <h3>Columns <small>— left vs right mapping for the selected sheet (scroll &rarr;). Tick <b>Key</b> on <b>one or more</b> columns — together they identify each record (like Key columns in Beyond Compare). Tick <b>unimp</b> to hide a column. Dropdowns remap mismatched headers.</small></h3>
+  <div id="colmapStrip"></div>
+</div>
+
+<div id="previewWrap">
+  <h3>Data preview <small>— first rows of each file, side by side. <b>Click column headers</b> to pick your key column(s) — combine as many as needed (highlighted yellow).</small></h3>
+  <div class="prevSides">
+    <div class="prev"><div class="ptitle" id="prevTitleL"></div><div class="pscroll" id="prevL" data-side="l"></div></div>
+    <div class="prev"><div class="ptitle" id="prevTitleR"></div><div class="pscroll" id="prevR" data-side="r"></div></div>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="imp">important difference</span><span class="unimp">unimportant difference</span>
+  <span class="lo">left-only row</span><span class="ro">right-only row</span>
+</div>
+
+<div id="err" class="err"></div>
+<div id="out"></div>
+
+<div id="gbWrap" style="display:none">
+  <h3>Group-by summary <small>— sum of numeric columns per group, both files side by side. Δ: <b style="color:#7a0000">red = mismatch</b> (key cell flags too), <b style="color:#0a6b2f">green = reconciled</b>.</small></h3>
+  <div class="opts" style="margin-bottom:8px">
+    <span>Sheets <span id="gbSheets" class="pickbox"></span></span>
+    <span>Group by <span id="gbKeys" class="pickbox"></span></span>
+    <span>Sum <span id="gbNums" class="pickbox"></span></span>
+  </div>
+  <div class="pscroll" style="max-height:50vh"><div id="gbOut"></div></div>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   Minimal XLSX reader (zip + XML) — no external libraries.
+   Mirrors BC's "conversion" step: sheets -> rows of cell values.
+   ================================================================ */
+
+const DEC = new TextDecoder();
+
+async function unzip(buf) {
+  const b = new Uint8Array(buf), dv = new DataView(buf);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= 0; i--)
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("not a zip file");
+  const n = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const entries = {};
+  for (let i = 0; i < n; i++) {
+    const method = dv.getUint16(off + 10, true);
+    const csize  = dv.getUint32(off + 20, true);
+    const nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true),
+          cl = dv.getUint16(off + 32, true);
+    const local = dv.getUint32(off + 42, true);
+    entries[DEC.decode(b.subarray(off + 46, off + 46 + nl))] = { method, csize, local };
+    off += 46 + nl + el + cl;
+  }
+  async function read(name) {
+    const e = entries[name]; if (!e) return null;
+    const nl = dv.getUint16(e.local + 26, true), el = dv.getUint16(e.local + 28, true);
+    const data = b.subarray(e.local + 30 + nl + el, e.local + 30 + nl + el + e.csize);
+    if (e.method === 0) return data;
+    const s = new Blob([data]).stream()
+      .pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  const text = async n => { const d = await read(n); return d ? DEC.decode(d) : null; };
+  return { read, text, names: Object.keys(entries) };
+}
+
+const unesc = s => s.replace(/&lt;/g,"<").replace(/&gt;/g,">")
+  .replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+  .replace(/&#x([0-9a-fA-F]+);/g, (_,h)=>String.fromCodePoint(parseInt(h,16)))
+  .replace(/&#(\d+);/g, (_,d)=>String.fromCodePoint(+d))
+  .replace(/&amp;/g,"&");
+
+const attrs = tag => {
+  const m = {}; const re = /([\w:]+)\s*=\s*"([^"]*)"/g; let a;
+  while ((a = re.exec(tag))) m[a[1]] = unesc(a[2]);
+  return m;
+};
+
+const BUILTIN_DATE_FMTS = new Set(
+  [14,15,16,17,18,19,20,21,22,27,28,29,30,31,32,33,34,35,36,45,46,47,50,51,52,53,54,55,56,57,58]);
+
+function fmtIsDate(code) {
+  const c = code.replace(/"[^"]*"|\\.|_[^ ]|\[[^\]]*\]/g, "");
+  return /[ymdhHsS]/.test(c) && !/[#0]\s*[ymd]/.test(c);
+}
+
+function colIndex(ref) {           // "BC12" -> 54 (0-based)
+  let n = 0;
+  for (const ch of ref) { if (ch < "A" || ch > "Z") break; n = n * 26 + (ch.charCodeAt(0) - 64); }
+  return n - 1;
+}
+
+const EXCEL_EPOCH = 25569;         // days 1899-12-30 -> unix epoch
+function serialToISO(serial) {
+  const ms = Math.round((serial - EXCEL_EPOCH) * 86400000);
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, "0");
+  const date = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())}`;
+  const t = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  return t === "00:00:00" ? date : `${date} ${t}`;
+}
+
+async function parseXlsx(buf) {
+  const zip = await unzip(buf);
+  // shared strings
+  const shared = [];
+  const ss = await zip.text("xl/sharedStrings.xml");
+  if (ss) for (const m of ss.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)) {
+    shared.push([...m[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+      .map(t => unesc(t[1])).join(""));
+  }
+  // styles: which xf indexes are date-formatted
+  const dateXf = new Set();
+  const st = await zip.text("xl/styles.xml");
+  if (st) {
+    const fmtMap = {};
+    for (const m of st.matchAll(/<numFmt\b[^>]*\/>/g)) {
+      const a = attrs(m[0]);
+      if (a.numFmtId !== undefined) fmtMap[+a.numFmtId] = fmtIsDate(a.formatCode || "");
+    }
+    const xfs = st.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/);
+    if (xfs) [...xfs[1].matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)]
+      .forEach((m, i) => {
+        const a = attrs(m[0]);
+        const id = +(a.numFmtId || 0);
+        if (BUILTIN_DATE_FMTS.has(id) || fmtMap[id] || a.applyNumberFormat === "1" && fmtMap[id])
+          dateXf.add(i);
+      });
+  }
+  // workbook + rels
+  const wbXml = await zip.text("xl/workbook.xml");
+  const relXml = await zip.text("xl/_rels/workbook.xml.rels");
+  const rels = {};
+  for (const m of relXml.matchAll(/<Relationship\b[^>]*\/>/g)) {
+    const a = attrs(m[0]);
+    rels[a.Id] = a.Target.startsWith("/") ? a.Target.slice(1) : "xl/" + a.Target;
+  }
+  const tables = [];
+  for (const m of wbXml.matchAll(/<sheet\b[^>]*\/>/g)) {
+    const a = attrs(m[0]);
+    const target = rels[a["r:id"]];
+    if (!target) continue;
+    const rows = [];
+    const xml = await zip.text(target);
+    if (!xml) { tables.push({ name: a.name, headers: [], rows: [] }); continue; }
+    for (const rm of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      const row = [];
+      for (const cm of rm[1].matchAll(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)) {
+        const ca = attrs(cm[0]);
+        const ci = colIndex(ca.r || "A");
+        const t = ca.t;
+        let v = null;
+        const vm = cm[0].match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
+        if (t === "inlineStr") {
+          const im = cm[0].match(/<is\b[^>]*>([\s\S]*?)<\/is>/);
+          v = im ? [...im[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x=>unesc(x[1])).join("") : "";
+        } else if (vm) {
+          const raw = unesc(vm[1]);
+          if (t === "s")       v = shared[+raw] ?? "";
+          else if (t === "str" || t === "e") v = raw;
+          else if (t === "b")  v = raw === "1";
+          else if (t === "d")  v = raw;
+          else {
+            const num = +raw;
+            v = (ca.s !== undefined && dateXf.has(+ca.s)) ? serialToISO(num) : num;
+          }
+        }
+        row[ci] = v;
+      }
+      rows.push(row);
+    }
+    tables.push({ name: a.name, headers: [], rows });
+  }
+  for (const t of tables) finishTable(t);
+  return tables;
+}
+
+/* ---------------- CSV ---------------- */
+
+function parseCsvText(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r\n|\r|\n/).filter((l, i, a) => l !== "" || i < a.length - 1);
+  const cands = [",", ";", "\t", "|"];
+  let best = ",", bestScore = -1;
+  for (const d of cands) {
+    const counts = lines.slice(0, 10).map(l => {
+      let n = 0, q = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') q = q ? l[i+1] !== '"' || (i++, false) : true;
+        else if (ch === d && !q) n++;
+      }
+      return n;
+    }).filter(x => x > 0);
+    const score = counts.length ? Math.min(...counts) * counts.length : 0;
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  const rows = [];
+  let cur = [], field = "", q = false, inField = false;
+  const pushRow = () => { cur.push(field); rows.push(cur); cur = []; field = ""; inField = false; };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i+1] === '"') { field += '"'; i++; } else q = false; }
+      else field += ch;
+    } else if (ch === '"' && !inField) { q = true; inField = true; }
+    else if (ch === best) { cur.push(field); field = ""; inField = false; }
+    else if (ch === "\n") pushRow();
+    else if (ch !== "\r") { field += ch; inField = true; }
+  }
+  if (field !== "" || inField || cur.length) pushRow();
+  return rows;
+}
+
+/* ---------------- shared table finishing ---------------- */
+
+const NUM_RE = /^[+-]?[\d,]*\.?\d+([eE][+-]?\d+)?$/;
+const DATE_RES = [
+  /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+  /^(\d{1,2})\/(\d{1,2})\/(\d{4})/,
+  /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/,
+  /^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/,
+  /^(\d{4})\/(\d{1,2})\/(\d{1,2})/,
+  /^(\d{1,2})\.(\d{1,2})\.(\d{4})/,
+];
+const MONTHS = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (typeof v !== "string") return null;
+  let s = v.trim().replace(/,/g, "").replace(/^[$£€¥]/, "");
+  return NUM_RE.test(s) ? +s : null;
+}
+
+function toDateMs(v) {
+  if (v instanceof Date) return v.getTime();
+  if (typeof v !== "string") return null;
+  const s = v.trim(); let m, y, mo, d, h=0, mi=0, sec=0;
+  if ((m = s.match(DATE_RES[0])))      { y=+m[1]; mo=+m[2]; d=+m[3]; h=+(m[4]||0); mi=+(m[5]||0); sec=+(m[6]||0); }
+  else if ((m = s.match(DATE_RES[1]))) { mo=+m[1]; d=+m[2]; y=+m[3]; }
+  else if ((m = s.match(DATE_RES[2]))) { mo=+m[1]; d=+m[2]; y=2000+(+m[3]); }
+  else if ((m = s.match(DATE_RES[3]))) { d=+m[1]; mo=MONTHS[m[2].toLowerCase()]; y=+m[3]; if (y<100) y+=2000; }
+  else if ((m = s.match(DATE_RES[4]))) { y=+m[1]; mo=+m[2]; d=+m[3]; }
+  else if ((m = s.match(DATE_RES[5]))) { d=+m[1]; mo=+m[2]; y=+m[3]; }
+  else return null;
+  if (!mo || mo > 12 || d > 31) return null;
+  return Date.UTC(y, mo-1, d, h, mi, sec);
+}
+
+const isScalar = v =>
+  (typeof v === "number") || (typeof v === "string" && v.trim() !== "" &&
+    (toNumber(v) !== null || toDateMs(v) !== null));
+
+function looksLikeHeader(first, rest) {
+  const vals = first.filter(v => v !== null && v !== undefined && v !== "");
+  if (!vals.length) return false;
+  if (!vals.every(v => typeof v === "string" && !isScalar(v))) return false;
+  if (!rest.length) return true;
+  return rest.slice(0, 20).some(r => r.some(v => v !== null && v !== undefined && v !== "" && isScalar(v)));
+}
+
+function trimRows(rows) {
+  while (rows.length && rows[rows.length-1].every(v => v === null || v === undefined || v === "")) rows.pop();
+  let w = 0;
+  for (const r of rows)
+    for (let i = r.length - 1; i >= 0; i--)
+      if (r[i] !== null && r[i] !== undefined && r[i] !== "") { w = Math.max(w, i + 1); break; }
+  return rows.map(r => { const o = r.slice(0, w); while (o.length < w) o.push(null); return o; });
+}
+
+function finishTable(t) {
+  t.rows = trimRows(t.rows);
+  if (!t.rows.length) { t.headers = []; t.hasHeader = true; return; }
+  if (looksLikeHeader(t.rows[0], t.rows.slice(1))) {
+    t.headers = t.rows[0].map(h => h == null ? "" : String(h));
+    t.rows = t.rows.slice(1); t.hasHeader = true;
+  } else {
+    const n = Math.max(...t.rows.map(r => r.length));
+    t.headers = Array(n).fill(""); t.hasHeader = false;
+  }
+}
+
+async function loadFile(file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (ext === "xlsx" || ext === "xlsm") return parseXlsx(await file.arrayBuffer());
+  const t = { name: file.name.replace(/\.[^.]+$/, ""), headers: [],
+              rows: parseCsvText(await file.text()) };
+  finishTable(t);
+  return [t];
+}
+
+/* ================================================================
+   Compare engine — port of bc_compare.py (BC Table Compare semantics)
+   ================================================================ */
+
+const EQUAL = 0, UNIMPORTANT = 1, IMPORTANT = 2;
+const DAY = 86400000;
+
+const disp = v => {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number" && Number.isInteger(v)) return String(v);
+  return String(v);
+};
+
+function cellsEqual(a, b) {
+  if (a === null || a === undefined) a = "";
+  if (b === null || b === undefined) b = "";
+  return a === b;
+}
+
+function compareCells(a, b, col, o) {
+  if (a === null || a === undefined) a = "";
+  if (b === null || b === undefined) b = "";
+  if (a === b) return EQUAL;
+  const un = o.unimportantCols.has(col);
+  const na = toNumber(a), nb = toNumber(b);
+  if (na !== null && nb !== null)
+    return Math.abs(na - nb) <= o.numTol ? (un ? UNIMPORTANT : EQUAL) : (un ? UNIMPORTANT : IMPORTANT);
+  const da = toDateMs(a), db = toDateMs(b);
+  if (da !== null && db !== null)
+    return Math.abs(da - db) <= o.dateTol * DAY ? (un ? UNIMPORTANT : EQUAL) : (un ? UNIMPORTANT : IMPORTANT);
+  let sa = disp(a), sb = disp(b);
+  if (sa === sb) return EQUAL;
+  let ca = sa, cb = sb;
+  if (o.ignoreCase) { ca = ca.toLowerCase(); cb = cb.toLowerCase(); }
+  if (o.ignoreWs) { ca = ca.trim().replace(/\s+/g, " "); cb = cb.trim().replace(/\s+/g, " "); }
+  if (ca === cb) return UNIMPORTANT;
+  return un ? UNIMPORTANT : IMPORTANT;
+}
+
+function alignColumns(l, r) {
+  const lookup = new Map();
+  r.headers.forEach((h, j) => {
+    if (!lookup.has(h)) lookup.set(h, j);
+    const k = h.toLowerCase();
+    if (!lookup.has(k)) lookup.set(k, j);
+  });
+  const used = new Set(), pairs = [], leftOnly = [];
+  l.headers.forEach((h, i) => {
+    let j = lookup.get(h);
+    if (j === undefined) j = lookup.get(h.toLowerCase());
+    if (j !== undefined && !used.has(j)) { pairs.push([i, j]); used.add(j); }
+    else { pairs.push([i, null]); leftOnly.push(h || `col${i+1}`); }
+  });
+  const rightOnly = r.headers.map((h, j) => used.has(j) ? null : (h || `col${j+1}`)).filter(x => x);
+  return { pairs, leftOnly, rightOnly };
+}
+
+function lcsAlign(sigL, sigR) {
+  const n = sigL.length, m = sigR.length;
+  const out = [];
+  if (n * m > 4e6) {                       // too big for DP — pair positionally
+    for (let i = 0; i < Math.max(n, m); i++)
+      out.push(i < n && i < m ? [i, i] : (i < n ? [i, null] : [null, i]));
+    return out;
+  }
+  const dp = new Uint32Array((n + 1) * (m + 1));
+  const key = (i, j) => i * (m + 1) + j;
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[key(i,j)] = sigL[i] === sigR[j]
+        ? dp[key(i+1, j+1)] + 1
+        : Math.max(dp[key(i+1, j)], dp[key(i, j+1)]);
+  let i = 0, j = 0;
+  const bufDel = [], bufIns = [];
+  const flush = () => {
+    const k = Math.min(bufDel.length, bufIns.length);
+    for (let x = 0; x < k; x++) out.push([bufDel[x], bufIns[x]]);
+    for (let x = k; x < bufDel.length; x++) out.push([bufDel[x], null]);
+    for (let x = k; x < bufIns.length; x++) out.push([null, bufIns[x]]);
+    bufDel.length = bufIns.length = 0;
+  };
+  while (i < n && j < m) {
+    if (sigL[i] === sigR[j]) { flush(); out.push([i, j]); i++; j++; }
+    else if (dp[key(i+1,j)] >= dp[key(i,j+1)]) bufDel.push(i++);
+    else bufIns.push(j++);
+  }
+  while (i < n) bufDel.push(i++);
+  while (j < m) bufIns.push(j++);
+  flush();
+  return out;
+}
+
+function compareSheet(left, right, keyCols, o, cfg) {
+  // cfg (optional) = per-sheet column config from the mapping panel:
+  // { pairs: [[li, rj|null, unimp], ...], keys: [[li, rj], ...] }
+  // columns flagged unimp (or named in o.unimportantCols) are excluded
+  // from comparison AND hidden from all views.
+  let pairs, leftOnly, rightOnly, lk, rk, useKeys, note = "";
+  const hideL = new Set(), hideR = new Set();
+  if (cfg) {
+    pairs = cfg.pairs;
+    const usedL = new Set(), usedR = new Set();
+    for (const [i, j] of pairs)
+      if (i !== null && j !== null) { usedL.add(i); usedR.add(j); }
+    leftOnly  = left.headers.map((h, i) => usedL.has(i) ? null : (h || `col${i+1}`)).filter(x => x);
+    rightOnly = right.headers.map((h, j) => usedR.has(j) ? null : (h || `col${j+1}`)).filter(x => x);
+    for (const [i, j, u] of pairs)
+      if (u) { if (i !== null) hideL.add(i); if (j !== null) hideR.add(j); }
+  } else {
+    ({ pairs, leftOnly, rightOnly } = alignColumns(left, right));
+  }
+  left.headers.forEach((h, i) => { if (o.unimportantCols.has(h)) hideL.add(i); });
+  right.headers.forEach((h, j) => { if (o.unimportantCols.has(h)) hideR.add(j); });
+  if (cfg) {
+    const keyPairs = cfg.keys.filter(([i, j]) => !hideL.has(i) && !hideR.has(j));
+    useKeys = keyPairs.length > 0;
+    lk = keyPairs.map(([i]) => i);
+    rk = keyPairs.map(([, j]) => j);
+  } else {
+    useKeys = keyCols.length > 0;
+    if (useKeys) {
+      const missing = keyCols.filter(k => !left.headers.includes(k) || !right.headers.includes(k));
+      if (missing.length) {
+        useKeys = false;
+        note = `key column(s) ${missing.join(", ")} missing on one side; fell back to content alignment`;
+      }
+    }
+    lk = useKeys ? keyCols.map(k => left.headers.indexOf(k)).filter(i => !hideL.has(i)) : [];
+    rk = useKeys ? keyCols.map(k => right.headers.indexOf(k)).filter(j => !hideR.has(j)) : [];
+    useKeys = lk.length > 0 && rk.length > 0;
+  }
+  const compared = pairs
+    .filter(([i, j, u]) => i !== null && i !== undefined && j !== null && j !== undefined
+            && !u && !hideL.has(i) && !hideR.has(j))
+    .map(([i, j]) => [i, j, left.headers[i] || `col${i+1}`]);
+  const keyOf = (t, r, idx) => idx.map(i => disp(r[i] ?? "")).join("");
+
+  let lrows = left.rows, rrows = right.rows;
+  const cmpKeyArr = (a, b) => {
+    for (let k = 0; k < Math.min(a.length, b.length); k++) {
+      const c = String(a[k]).localeCompare(String(b[k]), undefined, { numeric: true });
+      if (c) return c;
+    }
+    return a.length - b.length;
+  };
+
+  const aligned = [];
+  if (useKeys) {
+    const byKey = new Map();
+    rrows.forEach((r, j) => {
+      const k = keyOf(right, r, rk);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(j);
+    });
+    const consumed = new Set();
+    lrows.forEach((r, i) => {
+      const q = byKey.get(keyOf(left, r, lk));
+      if (q && q.length) { const j = q.shift(); consumed.add(j); aligned.push([i, j]); }
+      else aligned.push([i, null]);
+    });
+    rrows.forEach((_, j) => { if (!consumed.has(j)) aligned.push([null, j]); });
+    // like BC: key columns control sorting too — order the output by key,
+    // interleaving left-only / right-only records at their sorted position
+    const keyArr = ([li, rj]) =>
+      li !== null && li !== undefined
+        ? lk.map(i => disp(lrows[li][i] ?? ""))
+        : rk.map(j => disp(rrows[rj][j] ?? ""));
+    aligned.sort((x, y) => cmpKeyArr(keyArr(x), keyArr(y)));
+  } else {
+    const sigL = lrows.map(r => compared.map(([i]) => disp(r[i] ?? "")).join(""));
+    const sigR = rrows.map(r => compared.map(([, j]) => disp(r[j] ?? "")).join(""));
+    aligned.push(...lcsAlign(sigL, sigR));
+  }
+
+  const results = [];
+  const stats = { equal: 0, different: 0, leftOnly: 0, rightOnly: 0, important: 0, unimportant: 0 };
+  const rowNum = (idx, hasHdr) => idx + (hasHdr ? 2 : 1);
+  for (const [li, rj] of aligned) {
+    if (rj === null || rj === undefined) {
+      results.push({ kind: "left_only", ln: rowNum(li, left.hasHeader), rn: null, left: lrows[li], diffs: [], idx: results.length });
+      stats.leftOnly++;
+    } else if (li === null || li === undefined) {
+      results.push({ kind: "right_only", ln: null, rn: rowNum(rj, right.hasHeader), right: rrows[rj], diffs: [], idx: results.length });
+      stats.rightOnly++;
+    } else {
+      const diffs = [];
+      for (const [i, j, name] of compared) {
+        const kind = compareCells(lrows[li][i], rrows[rj][j], name, o);
+        if (kind !== EQUAL) {
+          diffs.push({ col: name, left: disp(lrows[li][i]), right: disp(rrows[rj][j]), kind });
+          stats[kind === IMPORTANT ? "important" : "unimportant"]++;
+        }
+      }
+      results.push({ kind: diffs.length ? "different" : "equal",
+                     ln: rowNum(li, left.hasHeader), rn: rowNum(rj, right.hasHeader),
+                     left: lrows[li], right: rrows[rj], diffs, idx: results.length,
+                     key: useKeys ? lk.map(i => disp(lrows[li][i] ?? "")).join(" | ") : "" });
+      stats[diffs.length ? "different" : "equal"]++;
+    }
+  }
+  // per-column diff tallies for header highlighting
+  const colDiff = {};
+  for (const r of results)
+    for (const d of r.diffs) {
+      const e = colDiff[d.col] || (colDiff[d.col] = { imp: 0, unimp: 0 });
+      e[d.kind === IMPORTANT ? "imp" : "unimp"]++;
+    }
+  return { name: left.name, results, leftOnly, rightOnly, compared, stats, note, colDiff,
+           keyL: useKeys ? lk : [], keyR: useKeys ? rk : [], hideL, hideR,
+           headersL: left.headers, headersR: right.headers,
+           hasHeaderL: left.hasHeader, hasHeaderR: right.hasHeader };
+}
+
+/* ================================================================
+   UI
+   ================================================================ */
+
+const state = { L: null, R: null, Lname: "", Rname: "", lastResults: null,
+                colCfg: {}, filter: "all", selBySheet: {} };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function setupDrop(zoneId, inputId, side) {
+  const zone = $(zoneId), input = $(inputId);
+  zone.onclick = () => input.click();
+  ["dragover","dragenter"].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.add("over"); }));
+  ["dragleave","drop"].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.remove("over"); }));
+  zone.addEventListener("drop", ev => { if (ev.dataTransfer.files[0]) pick(ev.dataTransfer.files[0], side); });
+  input.onchange = () => { if (input.files[0]) pick(input.files[0], side); };
+}
+setupDrop("dropL", "fileL", "L");
+setupDrop("dropR", "fileR", "R");
+
+// keep the preview panels' scroll in sync: vertical keeps records level,
+// horizontal is column-anchored so the same mapped field lines up on both sides
+function colPairMaps() {
+  const sides = sheetSides();
+  if (!sides) return null;
+  const [lt, , key] = sides;
+  const l2r = new Map(), r2l = new Map();
+  const sr = state.lastResults &&
+    state.lastResults.results.find(x => x.name === lt.name);
+  if (sr) sr.compared.forEach(([i, j]) => { l2r.set(i, j); r2l.set(j, i); });
+  else (state.colCfg[key] || []).forEach(rw => {
+    if (rw.l !== null && rw.r !== null && !rw.unimp) { l2r.set(rw.l, rw.r); r2l.set(rw.r, rw.l); }
+  });
+  return { l2r, r2l };
+}
+
+// column positions measured inside the table's own scroll content —
+// offsetLeft is useless here (it's page-relative, includes panel offsets)
+function colGeom(el) {
+  const tbl = el.querySelector("table.prev");
+  if (!tbl) return [];
+  const tRect = tbl.getBoundingClientRect();
+  return [...tbl.querySelectorAll("th[data-i]")].map(th => ({
+    i: +th.dataset.i,
+    off: th.getBoundingClientRect().left - tRect.left,
+    w: th.getBoundingClientRect().width,
+  }));
+}
+
+function syncHScroll(src, dst, maps) {
+  if (!maps) return;
+  const map = src.dataset.side === "l" ? maps.l2r : maps.r2l;
+  const g = colGeom(src), gd = colGeom(dst);
+  if (!g.length || !gd.length) return;
+  // leftmost column still visible at the scroll edge
+  let k = g.findIndex(c => c.off + c.w > src.scrollLeft + 2);
+  if (k < 0) k = g.length - 1;
+  // fraction of that column already scrolled past
+  let frac = Math.min(Math.max((src.scrollLeft - g[k].off) / g[k].w, 0), 1);
+  let j;
+  for (; k < g.length; k++) {
+    j = map.get(g[k].i);
+    if (j !== undefined) break;
+    frac = 0;                       // unmapped column: snap to next mapped field
+  }
+  if (j === undefined) return;
+  const d = gd.find(c => c.i === j);
+  if (d) dst.scrollLeft = d.off + frac * d.w;
+}
+
+{
+  const ps = [$("prevL"), $("prevR")];
+  ps.forEach(a => a.addEventListener("scroll", () => {
+    ps.forEach(b => { if (b !== a && b.scrollTop !== a.scrollTop) b.scrollTop = a.scrollTop; });
+    syncHScroll(a, a === $("prevL") ? $("prevR") : $("prevL"), colPairMaps());
+  }));
+}
+
+async function pick(file, side) {
+  $("err").textContent = "";
+  try {
+    const tables = await loadFile(file);
+    state[side] = tables;
+    state[side + "name"] = file.name;
+    const z = $("drop" + side);
+    z.classList.add("loaded");
+    $("name" + side).textContent = file.name;
+    $("meta" + side).textContent =
+      tables.map(t => `${t.name}: ${t.rows.length} rows × ${t.headers.length} cols`).join("   |   ");
+    refreshSheets();
+    if (state.L && state.R) { initGroupBy(); scheduleCompare(); }  // everything goes live once both files are in
+  } catch (e) {
+    $("err").textContent = `Failed to read ${file.name}: ${e.message}`;
+  }
+}
+
+function refreshSheets() {
+  const sel = $("optSheet");
+  const cur = sel.value;
+  const names = new Set();
+  (state.L || []).concat(state.R || []).forEach(t => names.add(t.name));
+  sel.innerHTML = `<option value="">All / auto</option>` +
+    [...names].map(n => `<option>${esc(n)}</option>`).join("");
+  sel.value = [...names].includes(cur) ? cur : "";
+  renderColMap();
+}
+
+
+/* ------- column mapping panel (BC "Columns" tab) ------- */
+
+const colLetter = i => {
+  let s = ""; i++;
+  while (i) { s = String.fromCharCode(65 + (i - 1) % 26) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+};
+const colLabel = (t, i) => `${colLetter(i)}: ${t.headers[i] || "(unnamed)"}`;
+const sampleOf = (t, i) => {
+  for (const r of t.rows.slice(0, 30))
+    if (r[i] !== null && r[i] !== undefined && r[i] !== "") return disp(r[i]);
+  return "";
+};
+
+function sheetSides() {
+  // returns [leftTable, rightTable, cfgKey] the panel is configuring, or null
+  if (!state.L || !state.R) return null;
+  const s = $("optSheet").value;
+  if (s) {
+    const l = state.L.find(t => t.name === s), r = state.R.find(t => t.name === s);
+    return l && r ? [l, r, s] : null;
+  }
+  if (state.L.length === 1 && state.R.length === 1)
+    return [state.L[0], state.R[0], state.L[0].name];
+  return null;
+}
+
+// pick the column(s) that uniquely identify matching records on both sides:
+// a single column unique in both files, else a unique column pair, else the
+// first paired column. Candidates are also ranked by how many records their
+// key values actually match across the files.
+function detectKeys(lt, rt, rows) {
+  const paired = rows.filter(rw => rw.l !== null && rw.r !== null);
+  if (!paired.length) return [];
+  const N = 20000;
+  const Ls = lt.rows.slice(0, N), Rs = rt.rows.slice(0, N);
+  const str = v => v == null ? "" : String(v).trim();
+  const stats = paired.map(rw => {
+    const ls = new Set(), rs = new Set();
+    for (const r of Ls) ls.add(str(r[rw.l]));
+    for (const r of Rs) rs.add(str(r[rw.r]));
+    let inter = 0;
+    for (const v of ls) if (rs.has(v)) inter++;
+    return { rw, lU: ls.size, rU: rs.size, inter };
+  });
+  // tiny bonus toward identifier-looking names so natural keys win ties
+  const keyish = rw => /id|key|code|no\.?$|num|date|name|product|ref|sku|item/i
+    .test(String(lt.headers[rw.l] || ""));
+  const cov = s => s.inter / Math.max(s.lU, s.rU) + (keyish(s.rw) ? 0.001 : 0);
+  const uniq = stats.filter(s => s.lU === Ls.length && s.rU === Rs.length && Ls.length && Rs.length);
+  uniq.sort((a, b) => cov(b) - cov(a));
+  if (uniq.length && cov(uniq[0]) > 0.5) return [uniq[0].rw];
+  // no unique single column: try pairs among the more selective columns
+  const cand = stats.filter(s => s.lU > 1).sort((a, b) => b.lU - a.lU).slice(0, 8);
+  let best = null, bestCov = 0.5;
+  for (let a = 0; a < cand.length; a++) for (let b = a + 1; b < cand.length; b++) {
+    const A = cand[a].rw, B = cand[b].rw;
+    const ls = new Set(), rs = new Set();
+    for (const r of Ls) ls.add(str(r[A.l]) + "\x01" + str(r[B.l]));
+    for (const r of Rs) rs.add(str(r[A.r]) + "\x01" + str(r[B.r]));
+    if (ls.size !== Ls.length || rs.size !== Rs.length) continue;
+    let inter = 0;
+    for (const v of ls) if (rs.has(v)) inter++;
+    const c = inter / Math.max(ls.size, rs.size) + (keyish(A) || keyish(B) ? 0.001 : 0);
+    if (c > bestCov) { bestCov = c; best = [A, B]; }
+  }
+  return best || (paired[0] ? [paired[0]] : []);
+}
+
+function defaultRows(lt, rt) {
+  const { pairs, rightOnly } = alignColumns(lt, rt);
+  const rows = pairs.map(([i, j]) => ({ l: i, r: j, key: false, unimp: false }));
+  const usedR = new Set(pairs.map(([, j]) => j));
+  rt.headers.forEach((_, j) => { if (!usedR.has(j)) rows.push({ l: null, r: j, key: false, unimp: false }); });
+  // auto-detect the identifying key columns on load
+  detectKeys(lt, rt, rows).forEach(rw => { rw.key = true; rw.auto = true; });
+  return rows;
+}
+
+function renderColMap() {
+  const wrap = $("colmapWrap"), strip = $("colmapStrip"), prev = $("previewWrap");
+  const sides = sheetSides();
+  if (!sides) {
+    wrap.style.display = "none";
+    prev.style.display = "none";
+    return;
+  }
+  const [lt, rt, key] = sides;
+  wrap.style.display = "block";
+  const rows = state.colCfg[key] || (state.colCfg[key] = defaultRows(lt, rt));
+  const opt = (t, sel) => `<option value="">—</option>` +
+    t.headers.map((h, i) => `<option value="${i}"${i === sel ? " selected" : ""}>${esc(colLabel(t, i))}</option>`).join("");
+  strip.innerHTML = rows.map((rw, k) => `
+    <div class="ccard${rw.l === null || rw.r === null ? " unmatched" : ""}${rw.unimp ? " dim" : ""}">
+      <div class="lab">LEFT</div>
+      <select data-k="${k}" data-side="l">${opt(lt, rw.l)}</select>
+      ${rw.l !== null ? `<span class="sample">${esc(sampleOf(lt, rw.l))}</span>` : ""}
+      <div class="lab">RIGHT</div>
+      <select data-k="${k}" data-side="r">${opt(rt, rw.r)}</select>
+      ${rw.r !== null ? `<span class="sample">${esc(sampleOf(rt, rw.r))}</span>` : ""}
+      <div class="flags">
+        <label><input type="checkbox" data-k="${k}" data-f="key" ${rw.key ? "checked" : ""} ${rw.l === null || rw.r === null ? "disabled" : ""}> key</label>
+        <label><input type="checkbox" data-k="${k}" data-f="unimp" ${rw.unimp ? "checked" : ""}> unimp</label>
+        ${rw.auto && rw.key ? `<span class="keytag" title="auto-detected as an identifying key column">auto</span>` : ""}
+      </div>
+      ${rw.unimp ? `<span class="hid">hidden from compare</span>` : ""}
+    </div>`).join("");
+  strip.querySelectorAll("select").forEach(sel => sel.onchange = onColChange);
+  strip.querySelectorAll("input[type=checkbox]").forEach(cb => cb.onchange = onColChange);
+  renderPreview(lt, rt, rows);
+}
+
+const PREV_ROWS = 40;
+
+function renderPreview(lt, rt, cfgRows) {
+  $("previewWrap").style.display = "block";
+  $("prevTitleL").textContent = `LEFT — ${state.Lname} · ${lt.name}`;
+  $("prevTitleR").textContent = `RIGHT — ${state.Rname} · ${rt.name}`;
+  // column index -> cfg row, per side
+  const byL = new Map(), byR = new Map();
+  cfgRows.forEach(rw => {
+    if (rw.l !== null) byL.set(rw.l, rw);
+    if (rw.r !== null) byR.set(rw.r, rw);
+  });
+  const table = (t, map, side) => {
+    const vis = t.headers.map((_, i) => i).filter(i => !(map.get(i) || {}).unimp);
+    const head = vis.map(i => {
+      const h = t.headers[i];
+      const rw = map.get(i);
+      const paired = rw && rw.l !== null && rw.r !== null;
+      const isKey = paired && rw.key;
+      const cls = isKey ? "keycol keyable" : paired ? "keyable" : "unmappable";
+      const tip = paired ? "click to use as key column" : "map this column on the other side first";
+      return `<th class="${cls}" data-side="${side}" data-i="${i}" title="${tip}">` +
+             `${esc(t.hasHeader ? (h || colLetter(i)) : colLetter(i))}` +
+             (isKey ? `<span class="keytag">key</span>` : "") + `</th>`;
+    }).join("");
+    const body = t.rows.slice(0, PREV_ROWS).map((r, ri) =>
+      `<tr><td class="rown">${ri + (t.hasHeader ? 2 : 1)}</td>` +
+      vis.map(i => {
+        const rw = map.get(i);
+        const kc = rw && rw.key && rw.l !== null && rw.r !== null ? ` class="keycell"` : "";
+        return `<td${kc}>${esc(disp(r[i]))}</td>`;
+      }).join("") + `</tr>`).join("");
+    const more = t.rows.length > PREV_ROWS
+      ? `<tr><td class="rown">…</td><td colspan="${vis.length}" style="color:#888">${t.rows.length - PREV_ROWS} more rows</td></tr>` : "";
+    return `<table class="prev"><tr><td class="rown">#</td>${head}</tr>${body}${more}</table>`;
+  };
+  // if a comparison already produced results for this sheet, the preview
+  // shows the aligned compare view (diffs + match gutter) instead of raw data
+  const sr = state.lastResults &&
+    state.lastResults.results.find(x => x.name === lt.name);
+  if (sr) {
+    $("prevTitleL").textContent = `LEFT — ${state.Lname} · ${lt.name} (compared)`;
+    $("prevTitleR").textContent = `RIGHT — ${state.Rname} · ${rt.name} (compared)`;
+    const pass = r => state.filter === "all" ||
+      (state.filter === "diff" ? r.kind !== "equal" : r.kind === "equal");
+    // apply unimp hides immediately, before the debounced re-compare lands
+    const [exL, exR] = curHides(lt.name);
+    const g = buildGridRows(sr, sr.results.filter(pass).slice(0, 500),
+      new Set([...sr.hideL, ...exL]), new Set([...sr.hideR, ...exR]));
+    $("prevL").innerHTML = `<table class="prev"><tr><td class="rown">#</td>${g.thL}</tr>${g.rowsL}</table>`;
+    $("prevR").innerHTML = `<table class="prev"><tr><td class="rown">#</td>${g.thR}</tr>${g.rowsR}</table>`;
+    document.querySelectorAll("#previewWrap th.keyable").forEach(th =>
+      th.onclick = () => togglePreviewKey(th));
+    markSelRow();
+    return;
+  }
+  $("prevL").innerHTML = table(lt, byL, "l");
+  $("prevR").innerHTML = table(rt, byR, "r");
+  document.querySelectorAll("#previewWrap th.keyable").forEach(th =>
+    th.onclick = () => togglePreviewKey(th));
+}
+
+function togglePreviewKey(th) {
+  const sides = sheetSides();
+  const key = th.dataset.sheet || (sides && sides[2]);
+  const rows = state.colCfg[key];
+  if (!rows) return;
+  const i = +th.dataset.i;
+  const rw = th.dataset.side === "l"
+    ? rows.find(x => x.l === i)
+    : rows.find(x => x.r === i);
+  if (!rw || rw.l === null || rw.r === null) return;
+  rw.key = !rw.key;
+  rw.auto = false;
+  renderColMap();                            // instant visual update
+  if (state.L && state.R) scheduleCompare(); // full re-compare, debounced
+}
+
+function onColChange(ev) {
+  const sides = sheetSides();
+  if (!sides) return;
+  const [lt, rt, key] = sides;
+  const rows = state.colCfg[key];
+  const el = ev.target, k = +el.dataset.k;
+  if (el.dataset.f) {
+    rows[k][el.dataset.f] = el.checked;
+    if (el.dataset.f === "key") rows[k].auto = false;
+    if (el.checked && el.dataset.f === "unimp") rows[k].key = false;
+    if (el.checked && el.dataset.f === "key") rows[k].unimp = false;
+  } else {
+    const v = el.value === "" ? null : +el.value;
+    // keep each column used once: unmap any other row using it
+    rows.forEach((rw, i) => { if (i !== k && v !== null && rw[el.dataset.side] === v) rw[el.dataset.side] = null; });
+    rows[k][el.dataset.side] = v;
+  }
+  renderColMap();                            // instant visual update (hide/dim now)
+  if (state.L && state.R) scheduleCompare(); // full re-compare, debounced
+}
+
+function getOptions() {
+  return {
+    sheet: $("optSheet").value,
+    numTol: +$("optNT").value || 0,
+    dateTol: +$("optDT").value || 0,
+    unimportantCols: new Set(),
+    ignoreCase: $("optIC").checked,
+    ignoreWs: $("optIW").checked,
+    noHeader: $("optNoHdr").checked,
+  };
+}
+
+function stripHeader(t) {
+  t.rows = [t.headers.map(h => h || null)].concat(t.rows);
+  t.headers = Array(t.headers.length || Math.max(0, ...t.rows.map(r => r.length))).fill("");
+  t.hasHeader = false;
+}
+
+// every option change re-compares live — no Compare button needed
+["optSheet", "optNT", "optDT", "optIC", "optIW", "optNoHdr"].forEach(id =>
+  $(id).onchange = () => { if (id === "optSheet") renderColMap();
+    if (state.L && state.R) scheduleCompare(); });
+
+// debounce live re-compares so rapid key/unimp changes coalesce into one run
+let cmpTimer = null;
+function scheduleCompare() {
+  if (!state.L || !state.R) return;
+  $("busy").style.display = "";
+  clearTimeout(cmpTimer);
+  cmpTimer = setTimeout(() => {
+    runCompare();
+    $("busy").style.display = "none";
+  }, 250);
+}
+
+function runCompare(doScroll) {
+  if (!state.L || !state.R) return;
+  $("err").textContent = "";
+  const o = getOptions();
+  // work on copies so re-running Compare is clean
+  const clone = t => ({ ...t, headers: t.headers.slice(), rows: t.rows.map(r => r.slice()) });
+  let L = state.L.map(clone), R = state.R.map(clone);
+  // stripHeader rewrites the table — only once per table, since live
+  // re-compares can re-enter here many times
+  if (o.noHeader) [...L, ...R].forEach(t => { if (t.hasHeader) stripHeader(t); });
+  if (o.sheet) {
+    L = L.filter(t => t.name === o.sheet);
+    R = R.filter(t => t.name === o.sheet);
+    if (!L.length || !R.length) { $("err").textContent = `Sheet "${o.sheet}" not on both sides`; return; }
+  }
+  let pairs, unL, unR;
+  if (L.length === 1 && R.length === 1) { pairs = [[L[0], R[0]]]; unL = unR = []; }
+  else {
+    const byName = new Map(R.map(t => [t.name, t]));
+    pairs = []; unL = [];
+    for (const lt of L) {
+      const rt = byName.get(lt.name);
+      if (rt) { pairs.push([lt, rt]); byName.delete(lt.name); }
+      else unL.push(lt.name);
+    }
+    unR = [...byName.values()].map(t => t.name);
+  }
+  const results = pairs.map(([l, r]) => {
+    // sheets never configured in the panel still get the default
+    // first-column key — much faster than content alignment
+    const cfgRows = state.colCfg[l.name] || (state.colCfg[l.name] = defaultRows(l, r));
+    const cfg = {
+      pairs: cfgRows.map(rw => [rw.l, rw.r, rw.unimp]),
+      keys: cfgRows.filter(rw => rw.key && !rw.unimp && rw.l !== null && rw.r !== null)
+                   .map(rw => [rw.l, rw.r]),
+    };
+    return compareSheet(l, r, [], o, cfg);
+  });
+  state.lastResults = { results, unL, unR, o };
+  state.selBySheet = {};
+  render(results, unL, unR, !!doScroll);
+  renderColMap();
+  $("btnCsv").disabled = false;
+}
+
+$("btnCsv").onclick = () => {
+  const { results, unL, unR } = state.lastResults;
+  const lines = [["sheet","left_row","right_row","row_status","column","left_value","right_value","severity"]];
+  const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  for (const sr of results) for (const r of sr.results) {
+    if (r.kind === "left_only")
+      lines.push([sr.name, r.ln, "", "left_only", "", (r.left||[]).map(disp).join(" | "), "", "important"]);
+    else if (r.kind === "right_only")
+      lines.push([sr.name, "", r.rn, "right_only", "", "", (r.right||[]).map(disp).join(" | "), "important"]);
+    else for (const d of r.diffs)
+      lines.push([sr.name, r.ln, r.rn, "different", d.col, d.left, d.right, d.kind === IMPORTANT ? "important" : "unimportant"]);
+  }
+  const blob = new Blob([lines.map(l => l.map(cell).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "diff.csv"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$("btnReset").onclick = () => location.reload();
+
+function buildGridRows(sr, shown, hideL = sr.hideL, hideR = sr.hideR) {
+  const keyL = new Set(sr.keyL), keyR = new Set(sr.keyR);
+  const idxByCol = new Map(sr.compared.map(([i, j, n]) => [n, [i, j]]));
+  const visL = sr.headersL.map((_, i) => i).filter(i => !hideL.has(i));
+  const visR = sr.headersR.map((_, j) => j).filter(j => !hideR.has(j));
+  const nameByL = new Map(sr.compared.map(([i, , n]) => [i, n]));
+  const nameByR = new Map(sr.compared.map(([, j, n]) => [j, n]));
+  const hdCls = i2n => i => {
+    const cd = sr.colDiff && sr.colDiff[i2n.get(i)];
+    return cd ? (cd.imp ? " hdimp" : " hdunimp") : "";
+  };
+  const hdTag = i2n => i => {
+    const cd = sr.colDiff && sr.colDiff[i2n.get(i)];
+    return cd ? `<span class="difftag${cd.imp ? "" : " un"}" title="${cd.imp + cd.unimp} record(s) differ in this column">${cd.imp + cd.unimp}</span>` : "";
+  };
+  const thL = visL.map(i =>
+    `<th class="keyable${keyL.has(i) ? ' keycol' : ''}${hdCls(nameByL)(i)}" data-side="l" data-i="${i}" data-sheet="${esc(sr.name)}" title="click to use as key column">${esc(sr.headersL[i] || colLetter(i))}${keyL.has(i) ? '<span class="keytag">key</span>' : ""}${hdTag(nameByL)(i)}</th>`).join("");
+  const thR = visR.map(j =>
+    `<th class="keyable${keyR.has(j) ? ' keycol' : ''}${hdCls(nameByR)(j)}" data-side="r" data-i="${j}" data-sheet="${esc(sr.name)}" title="click to use as key column">${esc(sr.headersR[j] || colLetter(j))}${keyR.has(j) ? '<span class="keytag">key</span>' : ""}${hdTag(nameByR)(j)}</th>`).join("");
+  const rowsL = [], rowsR = [];
+  for (const r of shown) {
+    const dL = new Map(), dR = new Map();
+    for (const d of r.diffs) {
+      const ij = idxByCol.get(d.col);
+      if (ij) { dL.set(ij[0], d.kind); dR.set(ij[1], d.kind); }
+    }
+    const rnCls = r.kind === "different" ? "rown rdiff" : "rown";
+    rowsL.push(`<tr data-idx="${r.idx}" data-sheet="${esc(sr.name)}"><td class="${rnCls}">${r.ln ?? ""}</td>` + visL.map(i => {
+      if (r.left == null) return `<td class="roB"></td>`;
+      const k = dL.get(i);
+      const c = r.kind === "left_only" ? "lo"
+        : k === IMPORTANT ? "imp" : k === UNIMPORTANT ? "unimp"
+        : keyL.has(i) ? "keycell" : r.kind === "different" ? "rowdiff" : "";
+      return `<td${c ? ` class="${c}"` : ""}>${esc(disp(r.left[i]))}</td>`;
+    }).join("") + `</tr>`);
+    rowsR.push(`<tr data-idx="${r.idx}" data-sheet="${esc(sr.name)}"><td class="${rnCls}">${r.rn ?? ""}</td>` + visR.map(j => {
+      if (r.right == null) return `<td class="loB"></td>`;
+      const k = dR.get(j);
+      const c = r.kind === "right_only" ? "ro"
+        : k === IMPORTANT ? "imp" : k === UNIMPORTANT ? "unimp"
+        : keyR.has(j) ? "keycell" : r.kind === "different" ? "rowdiff" : "";
+      return `<td${c ? ` class="${c}"` : ""}>${esc(disp(r.right[j]))}</td>`;
+    }).join("") + `</tr>`);
+  }
+  return { thL, thR, rowsL: rowsL.join(""), rowsR: rowsR.join("") };
+}
+
+// single table holding both records of a pair: one union header,
+// left record row, right record row — fields line up column-for-column.
+// unpaired columns appear once, blank on the side that lacks them.
+function buildRecPair(sr, rec, hideL, hideR) {
+  const keyL = new Set(sr.keyL), keyR = new Set(sr.keyR);
+  const idxByCol = new Map(sr.compared.map(([i, j, n]) => [n, [i, j]]));
+  const pairedL = new Map(sr.compared.map(([i, j, n]) => [i, j]));
+  const pairedR = new Map(sr.compared.map(([i, j]) => [j, i]));
+  const nameByL = new Map(sr.compared.map(([i, , n]) => [i, n]));
+  const cols = [];
+  sr.headersL.forEach((h, i) => {
+    if (hideL.has(i)) return;
+    cols.push({ i, j: pairedL.has(i) ? pairedL.get(i) : null });
+  });
+  sr.headersR.forEach((h, j) => {
+    if (hideR.has(j) || pairedR.has(j)) return;
+    cols.push({ i: null, j });
+  });
+  const dL = new Map(), dR = new Map();
+  for (const d of rec.diffs) {
+    const ij = idxByCol.get(d.col);
+    if (ij) { dL.set(ij[0], d.kind); dR.set(ij[1], d.kind); }
+  }
+  const head = cols.map(c => {
+    const paired = c.i !== null && c.j !== null;
+    const keyish = (c.i !== null && keyL.has(c.i)) || (c.j !== null && keyR.has(c.j));
+    const label = c.i !== null ? (sr.headersL[c.i] || colLetter(c.i))
+                               : (sr.headersR[c.j] || colLetter(c.j));
+    if (!paired)
+      return `<th>${esc(label)}</th>`;
+    const cd = sr.colDiff && sr.colDiff[nameByL.get(c.i)];
+    const cdCls = cd ? (cd.imp ? " hdimp" : " hdunimp") : "";
+    const tag = cd ? `<span class="difftag${cd.imp ? "" : " un"}" title="${cd.imp + cd.unimp} record(s) differ in this column">${cd.imp + cd.unimp}</span>` : "";
+    return `<th class="keyable${keyish ? " keycol" : ""}${cdCls}" data-side="l" data-i="${c.i}" data-sheet="${esc(sr.name)}" title="click to use as key column">${esc(label)}${keyish ? '<span class="keytag">key</span>' : ""}${tag}</th>`;
+  }).join("");
+  const rnCls = rec.kind === "different" ? "rown rdiff" : "rown";
+  const cellL = c => {
+    if (rec.left == null) return `<td class="roB"></td>`;
+    if (c.i === null) return `<td></td>`;
+    const k = dL.get(c.i);
+    const cl = rec.kind === "left_only" ? "lo"
+      : k === IMPORTANT ? "imp" : k === UNIMPORTANT ? "unimp"
+      : keyL.has(c.i) ? "keycell" : rec.kind === "different" ? "rowdiff" : "";
+    return `<td${cl ? ` class="${cl}"` : ""}>${esc(disp(rec.left[c.i]))}</td>`;
+  };
+  const cellR = c => {
+    if (rec.right == null) return `<td class="loB"></td>`;
+    if (c.j === null) return `<td></td>`;
+    const k = dR.get(c.j);
+    const cl = rec.kind === "right_only" ? "ro"
+      : k === IMPORTANT ? "imp" : k === UNIMPORTANT ? "unimp"
+      : keyR.has(c.j) ? "keycell" : rec.kind === "different" ? "rowdiff" : "";
+    return `<td${cl ? ` class="${cl}"` : ""}>${esc(disp(rec.right[c.j]))}</td>`;
+  };
+  return `<table class="prev"><tr><td class="rown">#</td>${head}</tr>` +
+    `<tr data-idx="${rec.idx}" data-sheet="${esc(sr.name)}"><td class="${rnCls}">${rec.ln ?? ""}</td>${cols.map(cellL).join("")}</tr>` +
+    `<tr data-idx="${rec.idx}" data-sheet="${esc(sr.name)}"><td class="${rnCls}">${rec.rn ?? ""}</td>${cols.map(cellR).join("")}</tr></table>`;
+}
+
+function setFilter(f) {
+  state.filter = f;
+  const l = state.lastResults;
+  if (l) render(l.results, l.unL, l.unR);
+  renderColMap();
+}
+const passRow = r => state.filter === "all" ||
+  (state.filter === "diff" ? r.kind !== "equal" : r.kind === "equal");
+
+// unimp columns checked since the last compare ran — applied to every
+// view immediately, before the debounced re-compare lands
+const curHides = name => {
+  const l = new Set(), r = new Set();
+  (state.colCfg[name] || []).forEach(rw => {
+    if (rw.unimp) { if (rw.l !== null) l.add(rw.l); if (rw.r !== null) r.add(rw.r); }
+  });
+  return [l, r];
+};
+
+// per-sheet selected record = index into sr.results; default = first shown
+function selIdxFor(sr, shown) {
+  const v = state.selBySheet[sr.name];
+  if (v !== undefined && sr.results[v]) return v;
+  return shown.length ? shown[0].idx : (sr.results[0] ? 0 : -1);
+}
+
+function selectRecord(name, idx) {
+  state.selBySheet[name] = idx;
+  const l = state.lastResults;
+  if (l) render(l.results, l.unL, l.unR, false);
+  renderColMap();
+  markSelRow();
+}
+
+function stepRecord(name, dir) {
+  const sr = state.lastResults && state.lastResults.results.find(x => x.name === name);
+  if (!sr) return;
+  const shown = sr.results.filter(passRow);
+  if (!shown.length) return;
+  const pos = shown.findIndex(r => r.idx === selIdxFor(sr, shown));
+  const np = pos < 0 ? 0 : Math.min(Math.max(pos + dir, 0), shown.length - 1);
+  selectRecord(name, shown[np].idx);
+}
+
+function jumpRecord(name, n) {
+  const sr = state.lastResults && state.lastResults.results.find(x => x.name === name);
+  if (!sr) return;
+  const shown = sr.results.filter(passRow);
+  const p = Math.min(Math.max(n - 1, 0), shown.length - 1);
+  if (shown[p]) selectRecord(name, shown[p].idx);
+}
+
+$("out").addEventListener("click", e => {
+  if (e.target.dataset && e.target.dataset.f) setFilter(e.target.dataset.f);
+  const tr = e.target.closest && e.target.closest("tr[data-idx]");
+  if (tr) selectRecord(tr.dataset.sheet, +tr.dataset.idx);
+});
+$("previewWrap").addEventListener("click", e => {
+  const tr = e.target.closest && e.target.closest("tr[data-idx]");
+  if (tr) selectRecord(tr.dataset.sheet, +tr.dataset.idx);
+});
+
+function markSelRow() {
+  document.querySelectorAll("tr.selrow").forEach(t => t.classList.remove("selrow"));
+  // highlight the selected record in the preview for context — the bottom
+  // inspector only ever shows the selected record, so no marker needed there
+  // (and the overlay would mask its diff cell colors)
+  Object.entries(state.selBySheet).forEach(([name, idx]) =>
+    document.querySelectorAll(`#previewWrap tr[data-idx="${idx}"][data-sheet="${CSS.escape(name)}"]`)
+      .forEach(t => t.classList.add("selrow")));
+}
+
+function render(results, unL, unR, doScroll) {
+  const f = state.filter;
+  const out = [];
+  const tot = { equal: 0, different: 0, leftOnly: 0, rightOnly: 0, important: 0, unimportant: 0 };
+  results.forEach(sr => Object.keys(tot).forEach(k => tot[k] += sr.stats[k]));
+  const pass = r => f === "all" || (f === "diff" ? r.kind !== "equal" : r.kind === "equal");
+  let nAll = 0, nDiff = 0;
+  results.forEach(sr => sr.results.forEach(r => { nAll++; if (r.kind !== "equal") nDiff++; }));
+  out.push(`<div>
+    <span class="stat">rows same: <b>${tot.equal}</b></span>
+    <span class="stat">rows different: <b>${tot.different}</b></span>
+    <span class="stat">left-only: <b>${tot.leftOnly}</b></span>
+    <span class="stat">right-only: <b>${tot.rightOnly}</b></span>
+    <span class="stat imp">important cells: <b>${tot.important}</b></span>
+    <span class="stat unimp">unimportant cells: <b>${tot.unimportant}</b></span>
+  </div>`);
+  out.push(`<div class="fbar"><span class="flab">Show:</span>
+    <button class="fbtn${f === "all" ? " on" : ""}" data-f="all">All (${nAll})</button>
+    <button class="fbtn${f === "diff" ? " on" : ""}" data-f="diff">Differences (${nDiff})</button>
+    <button class="fbtn${f === "same" ? " on" : ""}" data-f="same">Same (${nAll - nDiff})</button>
+  </div>`);
+  unL.forEach(n => out.push(`<h2 class="sheet">Sheet only in LEFT: ${esc(n)}</h2>`));
+  unR.forEach(n => out.push(`<h2 class="sheet">Sheet only in RIGHT: ${esc(n)}</h2>`));
+  for (const sr of results) {
+    out.push(`<h2 class="sheet">${esc(sr.name)}</h2>`);
+    out.push(`<small>same ${sr.stats.equal} · different ${sr.stats.different} · left-only ${sr.stats.leftOnly} · right-only ${sr.stats.rightOnly}` +
+      (sr.leftOnly.length ? ` · <span class="lo">left-only cols: ${esc(sr.leftOnly.join(", "))}</span>` : "") +
+      (sr.rightOnly.length ? ` · <span class="ro">right-only cols: ${esc(sr.rightOnly.join(", "))}</span>` : "") +
+      (sr.note ? ` · <span class="note">${esc(sr.note)}</span>` : "") + `</small>`);
+    const shown = sr.results.filter(pass);
+    if (!shown.length) { out.push("<p>nothing to show for this filter</p>"); continue; }
+    // single-record inspector: first record of the filtered list by default,
+    // or the record the user selected / navigated to
+    const idx = selIdxFor(sr, shown);
+    const pos = shown.findIndex(r => r.idx === idx);
+    const rec = pos >= 0 ? shown[pos] : (sr.results[idx] || shown[0]);
+    out.push(`<div class="recbar">
+      <button class="recbtn" data-sheet="${esc(sr.name)}" data-dir="-1"${pos <= 0 ? " disabled" : ""}>◀ prev</button>
+      <span>record ${pos >= 0 ? pos + 1 : "?"} / ${shown.length}${pos < 0 ? " (outside filter)" : ""}</span>
+      <button class="recbtn" data-sheet="${esc(sr.name)}" data-dir="1"${pos < 0 || pos >= shown.length - 1 ? " disabled" : ""}>next ▶</button>
+      <label>go to <input type="number" class="recjump" data-sheet="${esc(sr.name)}" min="1" max="${shown.length}" value="${pos >= 0 ? pos + 1 : ""}"></label>
+    </div>`);
+    const [exL, exR] = curHides(sr.name);
+    // one union table: top row = left record, bottom = right record,
+    // shared header so fields align column-for-column
+    out.push(`<div class="recV"><div class="pscroll">${
+      buildRecPair(sr, rec, new Set([...sr.hideL, ...exL]), new Set([...sr.hideR, ...exR]))
+    }</div></div>`);
+  }
+  $("out").innerHTML = out.join("\n");
+  document.querySelectorAll("#out th.keyable").forEach(th =>
+    th.onclick = () => togglePreviewKey(th));
+  document.querySelectorAll("#out .recbtn").forEach(b =>
+    b.onclick = () => stepRecord(b.dataset.sheet, +b.dataset.dir));
+  document.querySelectorAll("#out .recjump").forEach(inp =>
+    inp.onchange = () => jumpRecord(inp.dataset.sheet, +inp.value));
+  markSelRow();
+  if (doScroll) scrollTo({ top: $("out").offsetTop - 60, behavior: "smooth" });
+}
+
+/* ---------- group-by summary (separate window) ---------- */
+// reuses the already-loaded files — a pivot-style view that sums numeric
+// columns per group on both files side by side, for quick reconciliation.
+
+const gbState = { lt: null, rt: null, cols: [], numCols: [] };
+
+function gbSheetNames() {
+  const names = [];
+  (state.L || []).forEach(t => { if (!names.includes(t.name)) names.push(t.name); });
+  (state.R || []).forEach(t => { if (!names.includes(t.name)) names.push(t.name); });
+  return names;
+}
+
+// columns whose values are >=90% numeric in the first 2000 rows
+function numericCols(t) {
+  const res = new Set();
+  if (!t) return res;
+  const seen = new Array(t.headers.length).fill(0);
+  const ok = new Array(t.headers.length).fill(0);
+  t.rows.slice(0, 2000).forEach(r => {
+    for (let i = 0; i < t.headers.length; i++) {
+      const v = r[i];
+      if (v === null || v === undefined || v === "") continue;
+      seen[i]++;
+      if (toNumber(v) !== null) ok[i]++;
+    }
+  });
+  for (let i = 0; i < t.headers.length; i++)
+    if (seen[i] > 0 && ok[i] / seen[i] >= 0.9) res.add(i);
+  return res;
+}
+
+// group-by column candidates: mapped columns once, unmatched ones tagged
+function gbCols(lt, rt) {
+  if (!lt && !rt) return [];
+  if (!lt) return rt.headers.map((h, j) => ({ l: null, r: j, name: (h || colLetter(j)) + " (right only)" }));
+  if (!rt) return lt.headers.map((h, i) => ({ l: i, r: null, name: (h || colLetter(i)) + " (left only)" }));
+  const { pairs } = alignColumns(lt, rt);
+  const usedR = new Set(pairs.filter(([, j]) => j !== null).map(([, j]) => j));
+  const cols = pairs.map(([i, j]) => ({
+    l: i, r: j,
+    name: (lt.headers[i] || colLetter(i)) + (j === null ? " (left only)" : ""),
+  }));
+  rt.headers.forEach((h, j) => {
+    if (!usedR.has(j)) cols.push({ l: null, r: j, name: (h || colLetter(j)) + " (right only)" });
+  });
+  return cols;
+}
+
+function groupAgg(t, keyIdxs, numIdx) {
+  const m = new Map();
+  for (const r of t.rows) {
+    const k = keyIdxs.map(i => r[i] == null ? "" : String(r[i]).trim()).join("\x01");
+    let e = m.get(k);
+    if (!e) m.set(k, e = { n: 0, sums: numIdx.map(() => 0) });
+    e.n++;
+    for (let x = 0; x < numIdx.length; x++) {
+      if (numIdx[x] === null) continue;
+      const v = toNumber(r[numIdx[x]]);
+      if (v !== null) e.sums[x] += v;
+    }
+  }
+  return m;
+}
+
+// combine several sheets of one file into a single logical table:
+// union of headers, all rows appended (columns absent in a sheet read blank)
+function mergeTables(tables) {
+  const idx = new Map(), headers = [], rows = [];
+  for (const t of tables)
+    t.headers.forEach(h => { if (!idx.has(h)) { idx.set(h, headers.length); headers.push(h); } });
+  for (const t of tables) {
+    const map = t.headers.map(h => idx.get(h));
+    for (const r of t.rows) {
+      const nr = new Array(headers.length).fill(null);
+      for (let i = 0; i < r.length; i++) nr[map[i]] = r[i];
+      rows.push(nr);
+    }
+  }
+  return { name: "combined", headers, rows, hasHeader: true };
+}
+
+function initGroupBy() {
+  $("gbWrap").style.display = "block";
+  const cur = $("optSheet").value;
+  $("gbSheets").innerHTML = gbSheetNames().map(n =>
+    `<span class="chip${!cur || n === cur ? " on" : ""}" data-v="${esc(n)}">${esc(n)}</span>`).join("");
+  $("gbSheets").querySelectorAll(".chip").forEach(ch =>
+    ch.onclick = () => { ch.classList.toggle("on"); gbPopulate(); });
+  gbPopulate();
+}
+
+function gbPopulate() {
+  const sel = new Set([...$("gbSheets").querySelectorAll(".chip.on")]
+    .map(ch => ch.dataset.v));
+  const lts = (state.L || []).filter(t => sel.has(t.name));
+  const rts = (state.R || []).filter(t => sel.has(t.name));
+  if (!lts.length && !rts.length) {
+    gbState.lt = gbState.rt = null; gbState.cols = []; gbState.numCols = [];
+    $("gbKeys").innerHTML = ""; $("gbNums").innerHTML = "";
+    $("gbOut").innerHTML = `<p class="muted">select at least one sheet</p>`;
+    return;
+  }
+  gbState.lt = lts.length ? mergeTables(lts) : null;
+  gbState.rt = rts.length ? mergeTables(rts) : null;
+  gbState.cols = gbCols(gbState.lt, gbState.rt);
+  const numL = numericCols(gbState.lt), numR = numericCols(gbState.rt);
+  gbState.numCols = gbState.cols.filter(c =>
+    (c.l !== null && numL.has(c.l)) || (c.r !== null && numR.has(c.r)));
+  // default-checked = the compare key columns of the first selected sheet
+  const sr = state.lastResults && state.lastResults.results.find(s => s.name === [...sel][0]);
+  const defNames = new Set();
+  if (sr && gbState.lt) sr.keyL.forEach(i => { if (gbState.lt.headers[i]) defNames.add(gbState.lt.headers[i]); });
+  $("gbKeys").innerHTML = gbState.cols.map((c, i) =>
+    `<span class="chip${defNames.has(c.name) ? " on" : ""}" data-i="${i}">${esc(c.name)}</span>`).join("");
+  $("gbKeys").querySelectorAll(".chip").forEach(ch =>
+    ch.onclick = () => { ch.classList.toggle("on"); gbRender(); });
+  $("gbNums").innerHTML = gbState.numCols.map((c, i) =>
+    `<span class="chip on" data-i="${i}">${esc(c.name)}</span>`).join("") ||
+    `<span class="muted">no numeric columns detected</span>`;
+  $("gbNums").querySelectorAll(".chip").forEach(ch =>
+    ch.onclick = () => { ch.classList.toggle("on"); gbRender(); });
+  gbRender();
+}
+
+const fmtN = n => n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+
+function gbRender() {
+  const { lt, rt, cols, numCols } = gbState;
+  const sel = [...$("gbNums").querySelectorAll(".chip.on")].map(ch => +ch.dataset.i);
+  const sums = sel.map(i => numCols[i]);
+  // one or more group-by columns — a side can only aggregate if it has all of them
+  const keySel = [...$("gbKeys").querySelectorAll(".chip.on")].map(ch => +ch.dataset.i);
+  if (!keySel.length) { $("gbOut").innerHTML = `<p class="muted">pick one or more group-by columns</p>`; return; }
+  const kcs = keySel.map(i => cols[i]);
+  const lKeys = kcs.map(c => c.l), rKeys = kcs.map(c => c.r);
+  const aggL = lt && lKeys.every(i => i !== null) ? groupAgg(lt, lKeys, sums.map(c => c.l)) : null;
+  const aggR = rt && rKeys.every(i => i !== null) ? groupAgg(rt, rKeys, sums.map(c => c.r)) : null;
+  const tol = +$("optNT").value || 0;
+  const keys = new Set();
+  if (aggL) for (const k of aggL.keys()) keys.add(k);
+  if (aggR) for (const k of aggR.keys()) keys.add(k);
+  const sorted = [...keys].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const dash = `<td class="num muted">—</td>`;
+  // sums accumulate float noise (~1e-10 on billion-scale totals) — a delta
+  // only counts if it beats the user tolerance AND ~1e-9 of the magnitude
+  const normD = (l, r) => {
+    if (l === null || r === null) return { d: null, flag: false };
+    const d = l - r;
+    const eff = Math.max(tol, 1e-9 * Math.max(Math.abs(l), Math.abs(r)));
+    return Math.abs(d) > eff ? { d, flag: true } : { d: 0, flag: false };
+  };
+  let head = `<tr><th>${kcs.map(c => esc(c.name)).join(" | ")}</th><th class="num">rows L</th><th class="num">rows R</th>` +
+    sums.map(c => `<th class="num">Σ ${esc(c.name)} L</th><th class="num">Σ ${esc(c.name)} R</th><th class="num">Δ</th>`).join("") + `</tr>`;
+  const totL = { n: 0, sums: sums.map(() => 0) }, totR = { n: 0, sums: sums.map(() => 0) };
+  const body = sorted.map(k => {
+    const eL = aggL && aggL.get(k), eR = aggR && aggR.get(k);
+    const ds = sums.map((c, x) => {
+      const l = eL && c.l !== null ? eL.sums[x] : null;
+      const r = eR && c.r !== null ? eR.sums[x] : null;
+      return { c, x, l, r, ...normD(l, r) };
+    });
+    // any real delta anywhere in the row flags the group key cell too
+    const hasDelta = ds.some(x => x.flag);
+    let tds = `<td${hasDelta ? ' class="kdz"' : ""}>${esc(k.replace(/\x01/g, " | "))}</td>` +
+      (eL ? `<td class="num">${eL.n}</td>` : dash) +
+      (eR ? `<td class="num">${eR.n}</td>` : dash);
+    ds.forEach(({ c, x, l, r, d, flag }) => {
+      tds += (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) +
+             (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
+             (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
+      if (eL && c.l !== null) totL.sums[x] += l;
+      if (eR && c.r !== null) totR.sums[x] += r;
+    });
+    if (eL) totL.n += eL.n;
+    if (eR) totR.n += eR.n;
+    return `<tr>${tds}</tr>`;
+  });
+  const MAXG = 5000;
+  const shownBody = body.slice(0, MAXG);
+  const tot = `<tr class="tot"><td>TOTAL (${sorted.length} groups)</td>` +
+    `<td class="num">${totL.n}</td><td class="num">${totR.n}</td>` +
+    sums.map((c, x) => {
+      const l = c.l !== null ? totL.sums[x] : null;
+      const r = c.r !== null ? totR.sums[x] : null;
+      const { d, flag } = normD(l, r);
+      return (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) +
+             (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
+             (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
+    }).join("") + `</tr>`;
+  const missing = (!aggL && lKeys.some(i => i === null) ? "LEFT file lacks a selected group-by column. " : "") +
+                  (!aggR && rKeys.some(i => i === null) ? "RIGHT file lacks a selected group-by column." : "");
+  $("gbOut").innerHTML = `<table class="prev gb">${head}${tot}${shownBody.join("")}</table>` +
+    (missing ? `<p class="muted">${missing}</p>` : "") +
+    (body.length > MAXG ? `<p class="muted">showing first ${MAXG} of ${sorted.length} groups</p>` : "");
+}
+</script>
+</body>
+</html>
