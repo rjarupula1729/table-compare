@@ -9,6 +9,10 @@ Double-click `compare.html` (or drag it into a browser tab) — or open the
 hosted copy: <https://rjarupula1729.github.io/table-compare/>.
 100% client-side, zero dependencies — **your files never leave your machine**
 (safe for OneDrive / company data). Supports `.xlsx`, `.xlsm`, `.csv`, `.tsv`.
+Sheets and CSVs are **streamed while parsing**, so files with hundreds of
+thousands of rows (sheet XML or CSV larger than JS's ~512M-char string
+limit) load fine — tested to ~7M rows. The practical limit is how many
+parsed rows fit in browser memory.
 
 ### Quick start
 

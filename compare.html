@@ -315,10 +315,15 @@ const DEC = new TextDecoder();
 
 async function unzip(buf) {
   const b = new Uint8Array(buf), dv = new DataView(buf);
+  const sig = b.length >= 4 ? dv.getUint32(0, true) : 0;
+  if (sig === 0xE011CFD0)
+    throw new Error("old binary Excel format (.xls) — open it in Excel and Save As .xlsx");
+  if (sig !== 0x04034b50 && sig !== 0x06054b50)
+    throw new Error("not a real .xlsx — file is not a zip package (an .xls or web page renamed .xlsx?)");
   let eocd = -1;
   for (let i = b.length - 22; i >= 0; i--)
     if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  if (eocd < 0) throw new Error("not a zip file");
+  if (eocd < 0) throw new Error("corrupt .xlsx — no zip table of contents found");
   const n = dv.getUint16(eocd + 10, true);
   let off = dv.getUint32(eocd + 16, true);
   const entries = {};
@@ -333,16 +338,73 @@ async function unzip(buf) {
   }
   async function read(name) {
     const e = entries[name]; if (!e) return null;
+    if (dv.getUint16(e.local + 6, true) & 1)
+      throw new Error("file is password-protected — remove the password in Excel first");
+    if (e.method !== 0 && e.method !== 8)
+      throw new Error("unsupported zip compression (method " + e.method + ")");
     const nl = dv.getUint16(e.local + 26, true), el = dv.getUint16(e.local + 28, true);
     const data = b.subarray(e.local + 30 + nl + el, e.local + 30 + nl + el + e.csize);
     if (e.method === 0) return data;
+    if (typeof DecompressionStream === "undefined")
+      throw new Error("this browser cannot read .xlsx — update Chrome/Edge/Safari (needs DecompressionStream)");
     const s = new Blob([data]).stream()
       .pipeThrough(new DecompressionStream("deflate-raw"));
     return new Uint8Array(await new Response(s).arrayBuffer());
   }
-  const text = async n => { const d = await read(n); return d ? DEC.decode(d) : null; };
-  return { read, text, names: Object.keys(entries) };
+  function stream(name) {          // decompressed byte stream — for parts too big for one string
+    const e = entries[name]; if (!e) return null;
+    if (dv.getUint16(e.local + 6, true) & 1)
+      throw new Error("file is password-protected — remove the password in Excel first");
+    if (e.method !== 0 && e.method !== 8)
+      throw new Error("unsupported zip compression (method " + e.method + ")");
+    const nl = dv.getUint16(e.local + 26, true), el = dv.getUint16(e.local + 28, true);
+    const data = b.subarray(e.local + 30 + nl + el, e.local + 30 + nl + el + e.csize);
+    const raw = new Blob([data]).stream();
+    if (e.method === 0) return raw;
+    if (typeof DecompressionStream === "undefined")
+      throw new Error("this browser cannot read .xlsx — update Chrome/Edge/Safari (needs DecompressionStream)");
+    return raw.pipeThrough(new DecompressionStream("deflate-raw"));
+  }
+  // XML fetched whole (small parts only) — strip any namespace prefixes so
+  // <x:si>/<ns:t> parse the same as <si>/<t>
+  const text = async n => { const d = await read(n);
+    return d ? DEC.decode(d).replace(/<(\/?)[\w.:-]+:/g, "<$1") : null; };
+  return { read, text, stream, names: Object.keys(entries) };
 }
+
+// emit each complete <tag>...</tag> fragment from an XML part's stream —
+// never materializes the document (parts can exceed the JS string limit)
+async function* xmlFrags(zip, target, tag) {
+  const st = zip.stream(target);
+  if (!st) return;
+  const rdr = st.getReader();
+  const OPEN = new RegExp(`<(?:[\\w.:-]+:)?${tag}[\\s/>]`, "g"),
+        CLOSE = new RegExp(`</(?:[\\w.:-]+:)?${tag}\\s*>`, "g");
+  const SLICE = 8 << 20;                 // decode in ≤8MB slices — some streams give huge chunks
+  let buf = "";
+  for (;;) {
+    const { done, value } = await rdr.read();
+    if (value) for (let i = 0; i < value.length; i += SLICE)
+      buf += DEC.decode(value.subarray(i, i + SLICE), { stream: true });
+    let pos = 0, pend = -1;
+    for (;;) {
+      OPEN.lastIndex = pos;
+      const m = OPEN.exec(buf);
+      if (!m) break;
+      const s = m.index, gt = buf.indexOf(">", s);
+      if (gt < 0) { pend = s; break; }
+      if (buf[gt - 1] === "/") { pos = gt + 1; continue; }   // <tag .../> empty element
+      CLOSE.lastIndex = gt;
+      const c = CLOSE.exec(buf);
+      if (!c) { pend = s; break; }
+      yield buf.slice(s, c.index + c[0].length);
+      pos = c.index + c[0].length;
+    }
+    buf = buf.slice(pend >= 0 ? pend : Math.max(pos, buf.length - 16));
+    if (done) break;
+  }
+}
+const sheetRows = (zip, target) => xmlFrags(zip, target, "row");
 
 const unesc = s => s.replace(/&lt;/g,"<").replace(/&gt;/g,">")
   .replace(/&quot;/g,'"').replace(/&apos;/g,"'")
@@ -382,11 +444,11 @@ function serialToISO(serial) {
 
 async function parseXlsx(buf) {
   const zip = await unzip(buf);
-  // shared strings
+  // shared strings — streamed too, this part can be huge on text-heavy files
   const shared = [];
-  const ss = await zip.text("xl/sharedStrings.xml");
-  if (ss) for (const m of ss.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)) {
-    shared.push([...m[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+  for await (const frag0 of xmlFrags(zip, "xl/sharedStrings.xml", "si")) {
+    const frag = frag0.replace(/<(\/?)[\w.:-]+:/g, "<$1");
+    shared.push([...frag.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
       .map(t => unesc(t[1])).join(""));
   }
   // styles: which xf indexes are date-formatted
@@ -410,6 +472,8 @@ async function parseXlsx(buf) {
   // workbook + rels
   const wbXml = await zip.text("xl/workbook.xml");
   const relXml = await zip.text("xl/_rels/workbook.xml.rels");
+  if (!wbXml || !relXml)
+    throw new Error("zip opens but has no Excel workbook inside — not a real .xlsx");
   const rels = {};
   for (const m of relXml.matchAll(/<Relationship\b[^>]*\/>/g)) {
     const a = attrs(m[0]);
@@ -418,14 +482,17 @@ async function parseXlsx(buf) {
   const tables = [];
   for (const m of wbXml.matchAll(/<sheet\b[^>]*\/>/g)) {
     const a = attrs(m[0]);
-    const target = rels[a["r:id"]];
+    let target = rels[a["r:id"]];
     if (!target) continue;
+    if (!zip.names.includes(target)) {       // odd rels paths: fall back to basename match
+      const alt = zip.names.find(n => n.endsWith("/" + target.split("/").pop()));
+      if (alt) target = alt;
+    }
     const rows = [];
-    const xml = await zip.text(target);
-    if (!xml) { tables.push({ name: a.name, headers: [], rows: [] }); continue; }
-    for (const rm of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    for await (const frag0 of sheetRows(zip, target)) {
+      const frag = frag0.replace(/<(\/?)[\w.:-]+:/g, "<$1");
       const row = [];
-      for (const cm of rm[1].matchAll(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)) {
+      for (const cm of frag.matchAll(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)) {
         const ca = attrs(cm[0]);
         const ci = colIndex(ca.r || "A");
         const t = ca.t;
@@ -490,6 +557,71 @@ function parseCsvText(text) {
   }
   if (field !== "" || inField || cur.length) pushRow();
   return rows;
+}
+
+// same parser, fed chunk-by-chunk — big CSVs never become one giant string.
+// a one-char lookahead carries quotes across chunk edges ("" vs close-quote).
+function csvParser(delim) {
+  const rows = [];
+  let cur = [], field = "", q = false, inField = false;
+  const pushRow = () => { cur.push(field); rows.push(cur); cur = []; field = ""; inField = false; };
+  return {
+    feed(s) {
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (q) {
+          if (ch === '"') { if (s[i+1] === '"') { field += '"'; i++; } else q = false; }
+          else field += ch;
+        } else if (ch === '"' && !inField) { q = true; inField = true; }
+        else if (ch === delim) { cur.push(field); field = ""; inField = false; }
+        else if (ch === "\n") pushRow();
+        else if (ch !== "\r") { field += ch; inField = true; }
+      }
+    },
+    done() { if (field !== "" || inField || cur.length) pushRow(); return rows; },
+  };
+}
+
+async function parseCsvFile(file) {
+  const rdr = file.stream().getReader();
+  const rd0 = await rdr.read();
+  // delimiter sniff on a bounded prefix of the first chunk
+  const sniff = rd0.value ? DEC.decode(rd0.value.subarray(0, 1 << 18)) : "";
+  const cands = [",", ";", "\t", "|"];
+  let best = ",", bestScore = -1;
+  for (const d of cands) {
+    const counts = sniff.split(/\r\n|\r|\n/).slice(0, 10).map(l => {
+      let n = 0, q = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') q = q ? l[i+1] !== '"' || (i++, false) : true;
+        else if (ch === d && !q) n++;
+      }
+      return n;
+    }).filter(x => x > 0);
+    const score = counts.length ? Math.min(...counts) * counts.length : 0;
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  const p = csvParser(best);
+  const SLICE = 8 << 20;                       // decode/feed in ≤8MB pieces — chunks can be huge
+  let carry = "", first = rd0.value, bom = true;
+  const push = s => {
+    if (!s) return;
+    if (bom) { s = s.replace(/^\uFEFF/, ""); bom = false; }
+    s = carry + s; carry = s.slice(-1);
+    p.feed(s.slice(0, -1));
+  };
+  const feedU8 = u8 => {
+    for (let i = 0; i < u8.length; i += SLICE)
+      push(DEC.decode(u8.subarray(i, i + SLICE), { stream: true }));
+  };
+  for (;;) {
+    if (first) { feedU8(first); first = null; }
+    const { value, done } = await rdr.read();
+    if (value) feedU8(value);
+    if (done) { p.feed(carry + DEC.decode()); break; }
+  }
+  return p.done();
 }
 
 /* ---------------- shared table finishing ---------------- */
@@ -562,9 +694,11 @@ function finishTable(t) {
 
 async function loadFile(file) {
   const ext = file.name.split(".").pop().toLowerCase();
+  if (ext === "xls" || ext === "xlsb")
+    throw new Error(`.${ext} is an older/binary Excel format — open it in Excel and Save As .xlsx first`);
   if (ext === "xlsx" || ext === "xlsm") return parseXlsx(await file.arrayBuffer());
   const t = { name: file.name.replace(/\.[^.]+$/, ""), headers: [],
-              rows: parseCsvText(await file.text()) };
+              rows: await parseCsvFile(file) };
   finishTable(t);
   return [t];
 }
@@ -864,6 +998,7 @@ function syncHScroll(src, dst, maps) {
 async function pick(file, side) {
   $("err").textContent = "";
   try {
+    $("meta" + side).textContent = "reading…";
     const tables = await loadFile(file);
     state[side] = tables;
     state[side + "name"] = file.name;
