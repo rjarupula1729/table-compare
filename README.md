@@ -16,9 +16,11 @@ parsed rows fit in browser memory.
 
 ### Quick start
 
-1. Drop your **LEFT** and **RIGHT** files onto the two panels.
-2. The tool **auto-detects the key column(s)** that uniquely identify
-   matching records and runs the comparison immediately — no buttons needed.
+1. Drop your **LEFT** and **RIGHT** files onto the two panels — or just
+   **one file** to preview its raw data and run group-by validation on it.
+2. With two files, the tool **auto-detects the key column(s)** that
+   uniquely identify matching records and runs the comparison
+   immediately — no buttons needed.
 3. Scroll to the bottom: records are aligned and sorted by key, differences
    highlighted.
 
@@ -76,6 +78,9 @@ comparison re-runs by itself.
 - Pivot-style reconciliation: pick **Sheets** (multiple — their rows are
   combined), **Group by** columns (multiple — composite groups), and
   **Sum** columns (auto-detected numerics).
+- Works with **one file or two**: a single loaded file gives a one-sided
+  summary (row counts + sums per group) — handy for validating raw data
+  on its own. With two files the groups show both sides plus `Δ`.
 - **Group-by order is yours**: click the *Group by* chips in the order you
   want to group — numbered badges show the hierarchy (`1` = outermost
   group). Untick and re-tick a chip to move it to the end.

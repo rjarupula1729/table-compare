@@ -292,7 +292,7 @@
 <div id="out"></div>
 
 <div id="gbWrap" style="display:none">
-  <h3>Group-by summary <small>— sum of numeric columns per group, both files side by side. Δ: <b style="color:#7a0000">red = mismatch</b> (key cell flags too), <b style="color:#0a6b2f">green = reconciled</b>.</small></h3>
+  <h3>Group-by summary <small>— sum of numeric columns per group; works on one file, or both side by side. Δ: <b style="color:#7a0000">red = mismatch</b> (key cell flags too), <b style="color:#0a6b2f">green = reconciled</b>.</small></h3>
   <div class="opts" style="margin-bottom:8px">
     <span>Sheets <span id="gbSheets" class="pickbox"></span></span>
     <span>Group by <small class="muted">(click in order — 1 = outermost)</small>
@@ -1008,7 +1008,8 @@ async function pick(file, side) {
     $("meta" + side).textContent =
       tables.map(t => `${t.name}: ${t.rows.length} rows × ${t.headers.length} cols`).join("   |   ");
     refreshSheets();
-    if (state.L && state.R) { initGroupBy(); scheduleCompare(); }  // everything goes live once both files are in
+    if (state.L || state.R) initGroupBy();                          // group-by works on one file too
+    if (state.L && state.R) scheduleCompare();                      // compare goes live once both files are in
   } catch (e) {
     $("err").textContent = `Failed to read ${file.name}: ${e.message}`;
   }
@@ -1110,7 +1111,8 @@ function renderColMap() {
   const sides = sheetSides();
   if (!sides) {
     wrap.style.display = "none";
-    prev.style.display = "none";
+    if (state.L || state.R) renderSinglePreview();
+    else prev.style.display = "none";
     return;
   }
   const [lt, rt, key] = sides;
@@ -1139,6 +1141,28 @@ function renderColMap() {
 }
 
 const PREV_ROWS = 40;
+
+// single-file mode: show the loaded file's raw data — no mapping/keys yet
+function renderSinglePreview() {
+  const side = state.L ? "L" : "R", other = side === "L" ? "R" : "L";
+  const tabs = state[side] || [];
+  const t = tabs.find(x => x.name === $("optSheet").value) || tabs[0];
+  if (!t) { $("previewWrap").style.display = "none"; return; }
+  $("previewWrap").style.display = "block";
+  $("prevTitle" + side).textContent =
+    `${side === "L" ? "LEFT" : "RIGHT"} — ${state[side + "name"]} · ${t.name}`;
+  $("prevTitle" + other).textContent = `drop a ${other} file to compare`;
+  $("prev" + other).innerHTML = "";
+  const head = t.headers.map((h, i) =>
+    `<th>${esc(t.hasHeader ? (h || colLetter(i)) : colLetter(i))}</th>`).join("");
+  const body = t.rows.slice(0, PREV_ROWS).map((r, ri) =>
+    `<tr><td class="rown">${ri + (t.hasHeader ? 2 : 1)}</td>` +
+    t.headers.map((_, i) => `<td>${esc(disp(r[i]))}</td>`).join("") + `</tr>`).join("");
+  const more = t.rows.length > PREV_ROWS
+    ? `<tr><td class="rown">…</td><td colspan="${t.headers.length}" style="color:#888">${t.rows.length - PREV_ROWS} more rows</td></tr>` : "";
+  $("prev" + side).innerHTML =
+    `<table class="prev"><tr><td class="rown">#</td>${head}</tr>${body}${more}</table>`;
+}
 
 function renderPreview(lt, rt, cfgRows) {
   $("previewWrap").style.display = "block";
@@ -1610,8 +1634,8 @@ function numericCols(t) {
 // group-by column candidates: mapped columns once, unmatched ones tagged
 function gbCols(lt, rt) {
   if (!lt && !rt) return [];
-  if (!lt) return rt.headers.map((h, j) => ({ l: null, r: j, name: (h || colLetter(j)) + " (right only)" }));
-  if (!rt) return lt.headers.map((h, i) => ({ l: i, r: null, name: (h || colLetter(i)) + " (left only)" }));
+  if (!lt) return rt.headers.map((h, j) => ({ l: null, r: j, name: h || colLetter(j) }));
+  if (!rt) return lt.headers.map((h, i) => ({ l: i, r: null, name: h || colLetter(i) }));
   const { pairs } = alignColumns(lt, rt);
   const usedR = new Set(pairs.filter(([, j]) => j !== null).map(([, j]) => j));
   const cols = pairs.map(([i, j]) => ({
@@ -1750,13 +1774,17 @@ function gbRender() {
     const eff = Math.max(tol, 1e-9 * Math.max(Math.abs(l), Math.abs(r)));
     return Math.abs(d) > eff ? { d, flag: true } : { d: 0, flag: false };
   };
-  let head = `<tr><th>${kcs.map(c => esc(c.name)).join(" | ")}</th><th class="num">rows L</th><th class="num">rows R</th>` +
-    sums.map(c => `<th class="num">Σ ${esc(c.name)} L</th><th class="num">Σ ${esc(c.name)} R</th><th class="num">Δ</th>`).join("") + `</tr>`;
+  let head = `<tr><th>${kcs.map(c => esc(c.name)).join(" | ")}</th>` +
+    (lt ? `<th class="num">rows L</th>` : "") + (rt ? `<th class="num">rows R</th>` : "") +
+    sums.map(c => (lt ? `<th class="num">Σ ${esc(c.name)} L</th>` : "") +
+                  (rt ? `<th class="num">Σ ${esc(c.name)} R</th>` : "") +
+                  (lt && rt ? `<th class="num">Δ</th>` : "")).join("") + `</tr>`;
   const xrows = [[...kcs.map(c => ({ v: c.name, s: 1 })),
-    { v: "rows L", s: 1 }, { v: "rows R", s: 1 },
-    ...sums.flatMap(c => [{ v: `Sum_${c.name} L`, s: 1 },
-                          { v: `Sum_${c.name} R`, s: 1 },
-                          { v: `Delta_${c.name}`, s: 1 }])]];
+    ...(lt ? [{ v: "rows L", s: 1 }] : []), ...(rt ? [{ v: "rows R", s: 1 }] : []),
+    ...sums.flatMap(c => [
+      ...(lt ? [{ v: `Sum_${c.name} L`, s: 1 }] : []),
+      ...(rt ? [{ v: `Sum_${c.name} R`, s: 1 }] : []),
+      ...(lt && rt ? [{ v: `Delta_${c.name}`, s: 1 }] : [])])]];
   const totL = { n: 0, sums: sums.map(() => 0) }, totR = { n: 0, sums: sums.map(() => 0) };
   const body = sorted.map(k => {
     const eL = aggL && aggL.get(k), eR = aggR && aggR.get(k);
@@ -1769,16 +1797,18 @@ function gbRender() {
     // any real delta anywhere in the row flags the group key cell too
     const hasDelta = ds.some(x => x.flag);
     k.split("\x01").forEach(v => xr.push({ v, s: hasDelta ? 2 : 0 }));
-    xr.push({ v: eL ? eL.n : "", s: 0 }, { v: eR ? eR.n : "", s: 0 });
+    if (lt) xr.push({ v: eL ? eL.n : "", s: 0 });
+    if (rt) xr.push({ v: eR ? eR.n : "", s: 0 });
     let tds = `<td${hasDelta ? ' class="kdz"' : ""}>${esc(k.replace(/\x01/g, " | "))}</td>` +
-      (eL ? `<td class="num">${eL.n}</td>` : dash) +
-      (eR ? `<td class="num">${eR.n}</td>` : dash);
+      (lt ? (eL ? `<td class="num">${eL.n}</td>` : dash) : "") +
+      (rt ? (eR ? `<td class="num">${eR.n}</td>` : dash) : "");
     ds.forEach(({ c, x, l, r, d, flag }) => {
-      tds += (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) +
-             (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
-             (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
-      xr.push({ v: l ?? "", s: 0 }, { v: r ?? "", s: 0 },
-              { v: d ?? "", s: d === null ? 0 : (flag ? 2 : 3) });
+      if (lt) tds += l !== null ? `<td class="num">${fmtN(l)}</td>` : dash;
+      if (rt) tds += r !== null ? `<td class="num">${fmtN(r)}</td>` : dash;
+      if (lt && rt) tds += d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash;
+      if (lt) xr.push({ v: l ?? "", s: 0 });
+      if (rt) xr.push({ v: r ?? "", s: 0 });
+      if (lt && rt) xr.push({ v: d ?? "", s: d === null ? 0 : (flag ? 2 : 3) });
       if (eL && c.l !== null) totL.sums[x] += l;
       if (eR && c.r !== null) totR.sums[x] += r;
     });
@@ -1790,30 +1820,32 @@ function gbRender() {
   const MAXG = 5000;
   const shownBody = body.slice(0, MAXG);
   const tot = `<tr class="tot"><td>TOTAL (${sorted.length} groups)</td>` +
-    `<td class="num">${totL.n}</td><td class="num">${totR.n}</td>` +
+    (lt ? `<td class="num">${totL.n}</td>` : "") +
+    (rt ? `<td class="num">${totR.n}</td>` : "") +
     sums.map((c, x) => {
       const l = c.l !== null ? totL.sums[x] : null;
       const r = c.r !== null ? totR.sums[x] : null;
       const { d, flag } = normD(l, r);
-      return (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) +
-             (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) +
-             (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash);
+      return (lt ? (l !== null ? `<td class="num">${fmtN(l)}</td>` : dash) : "") +
+             (rt ? (r !== null ? `<td class="num">${fmtN(r)}</td>` : dash) : "") +
+             (lt && rt ? (d !== null ? `<td class="num ${flag ? "dz" : "ok"}">${fmtN(d)}</td>` : dash) : "");
     }).join("") + `</tr>`;
   xrows.push([{ v: `TOTAL (${sorted.length} groups)`, s: 4 },
     ...Array(keySel.length - 1).fill({ v: "", s: 4 }),
-    { v: totL.n, s: 4 }, { v: totR.n, s: 4 },
+    ...(lt ? [{ v: totL.n, s: 4 }] : []), ...(rt ? [{ v: totR.n, s: 4 }] : []),
     ...sums.flatMap((c, x) => {
       const l = c.l !== null ? totL.sums[x] : null;
       const r = c.r !== null ? totR.sums[x] : null;
       const { d, flag } = normD(l, r);
-      return [{ v: l ?? "", s: 4 }, { v: r ?? "", s: 4 },
-              { v: d ?? "", s: d === null ? 4 : (flag ? 2 : 3) }];
+      return [...(lt ? [{ v: l ?? "", s: 4 }] : []),
+              ...(rt ? [{ v: r ?? "", s: 4 }] : []),
+              ...(lt && rt ? [{ v: d ?? "", s: d === null ? 4 : (flag ? 2 : 3) }] : [])];
     })]);
   gbState.lastXlsx = xrows;
   $("btnGbXlsx").disabled = false;
   $("btnGbHtml").disabled = false;
-  const missing = (!aggL && lKeys.some(i => i === null) ? "LEFT file lacks a selected group-by column. " : "") +
-                  (!aggR && rKeys.some(i => i === null) ? "RIGHT file lacks a selected group-by column." : "");
+  const missing = (lt && lKeys.some(i => i === null) ? "LEFT file lacks a selected group-by column. " : "") +
+                  (rt && rKeys.some(i => i === null) ? "RIGHT file lacks a selected group-by column." : "");
   $("gbOut").innerHTML = `<table class="prev gb">${head}${tot}${shownBody.join("")}</table>` +
     (missing ? `<p class="muted">${missing}</p>` : "") +
     (body.length > MAXG ? `<p class="muted">showing first ${MAXG} of ${sorted.length} groups</p>` : "");
